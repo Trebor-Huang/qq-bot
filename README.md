@@ -28,5 +28,5 @@ Anyone can request features in the issues!
 
 # Acknowledgements
 
-Many thanks to (@ice-1000)[https://github.com/ice1000] who generously paid for the Pro functionalities of CoolQ.
+Many thanks to [@ice-1000](https://github.com/ice1000) who generously paid for the Pro functionalities of CoolQ.
 
