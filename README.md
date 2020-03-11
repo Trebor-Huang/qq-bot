@@ -25,3 +25,8 @@ I do not want to put a LaTeX distribution in my small virtual machine, so the ma
  - The code is actually very messy.
 
 Anyone can request features in the issues!
+
+# Acknowledgements
+
+Many thanks to (@ice-1000)[https://github.com/ice1000] who generously paid for the Pro functionalities of CoolQ.
+
