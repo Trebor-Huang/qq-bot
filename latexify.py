@@ -21,5 +21,14 @@ def get_preamble(usepackage=None, definitions=""):
     return r"\documentclass[varwidth,border=1pt]{standalone}" + \
       "\n\\usepackage{" + ", ".join(usepackage) + "}\n\\usepackage{xeCJK}\n" + definitions + "\n\\begin{document}\n"
 
+def pdf_doc(title, doc):
+    doc = f"========\n{title}\n========\n" + doc.replace("\n    ", "\n")
+    docname = "DOC" + hex(hash(doc))[1:] 
+    with open(docname + ".rst", "w") as rst:
+        rst.write(doc)
+    os.system(f"rst2pdf {docname}.rst")
+    os.system(f"convert -density 256 {docname}.pdf -antialias -append ./img/{title}.jpeg")
+    os.system(f"rm *.rst *.pdf")
+
 if __name__ == "__main__":
     print(latexify(r"你好！$\displaystyle \int_{-\infty}^\infty e^{-x^2} = \sqrt{\pi}.$Yes.", "test", verbose=False))

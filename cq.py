@@ -276,7 +276,11 @@ def handle_msg(event):
                     if not res.__doc__:
                         return {'reply': "这个东西没有帮助文档诶"}
                     bot.send_private_msg(message=f"这个对象：\n\n{str(res)}\n\n的帮助文档如下：", user_id=event['user_id'], auto_escape=True)
-                    bot.send_private_msg(message=clamp(res.__doc__, l=2000), user_id=event['user_id'], auto_escape=True)
+                    latexify.pdf_doc(comm[4:].strip(), res.__doc__)
+                    bot.send_private_msg(message=clamp(res.__doc__, 2000), user_id=event['user_id'], auto_escape=True)
+                    # TODO this is currently undoable since the image is probably too big
+                    # TODO we'll send the help in pages instead
+                    #! bot.send_private_msg(message=f"[CQ:image,file=file:///G:\\{comm[4:].strip()}.jpeg]", user_id=event['user_id'], auto_escape=False)
                     return {'reply': "帮助已发送至私聊", 'auto_escape': True}
                 except Exception as e:
                     return {'reply': '报错了qaq: ' + str(e), 'at_sender': False, 'auto_escape': True}
