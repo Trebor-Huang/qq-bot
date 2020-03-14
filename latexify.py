@@ -27,7 +27,7 @@ def pdf_doc(title, doc):
     with open(docname + ".rst", "w") as rst:
         rst.write(doc)
     os.system(f"rst2pdf {docname}.rst")
-    os.system(f"convert -density 256 {docname}.pdf -antialias -append ./img/{title}.jpeg")
+    os.system(f"convert -density 256 {docname}.pdf -antialias ./img/{title}.jpeg")
     os.system(f"rm *.rst *.pdf")
 
 if __name__ == "__main__":
