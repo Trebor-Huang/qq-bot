@@ -56,9 +56,8 @@ def get_preamble(usepackage=None, definitions=""):
     return r"\documentclass[varwidth,border=1pt]{standalone}" + \
       "\n\\usepackage{" + ", ".join(usepackage) + "}\n\\usepackage{xeCJK}\n" + definitions + "\n\\begin{document}\n"
 
-@app.task
 def pdf_doc(title, doc):
-    doc = f"========\n{title}\n========\n" + doc.replace("\n    ", "\n")
+    doc = doc.replace("\n    ", "\n")
     docname = "DOC" + hex(hash(doc))[1:] 
     with open(docname + ".rst", "w") as rst:
         rst.write(doc)
@@ -80,7 +79,7 @@ def render_latex_and_send(res, event, latex_packages, resend=False):
         except Exception:
             print("Failed to recall latex spam.")
         bot.send(event=event, message=f"[CQ:image,file=file:///G:\\{filename}.jpeg]", auto_escape=False)
-        return 0, r
+        return 0, r, os.system("rm ./img/*.jpeg")
     except RuntimeError as e:
         bot.send_private_msg(user_id=event['user_id'], message=event['message'])
         bot.send_private_msg(user_id=event['user_id'], message = "错误如下：\n" + str(e).strip(), auto_escape=True)
@@ -90,6 +89,19 @@ def render_latex_and_send(res, event, latex_packages, resend=False):
             print("Failed to recall latex spam.")
         bot.send(event=event, message="LaTeX有误")
         return 1
+
+@app.task
+def send_rst_doc(title, doc, event):
+    r = pdf_doc(title, doc)
+    i = 0
+    while os.path.isfile(f"./img/{title}-{i}.jpeg"):
+        bot.send_private_msg(user_id=event["user_id"], message=f"[CQ:image,file=file:///G:\\{title}-{i}.jpeg]", auto_escape=False)
+        i += 1
+    if os.path.isfile(f"./img/{title}.jpeg"):
+        bot.send_private_msg(user_id=event["user_id"], message=f"[CQ:image,file=file:///G:\\{title}.jpeg]", auto_escape=False)
+    r1 = os.system("rm ./img/*.jpeg")
+    return r, r1
+        
 
 if __name__ == "__main__":
     print(latexify(r"你好！$\displaystyle \int_{-\infty}^\infty e^{-x^2} = \sqrt{\pi}.$Yes.", "test", verbose=False))
