@@ -1,6 +1,3 @@
-"""start:
-uwsgi --http 127.0.0.1:8099 --wsgi-file cq.py --callable application --processes 1 --threads 2 --harakiri 30 --stats 127.0.0.1:9191
-"""
 import random
 import time
 import numpy
@@ -9,12 +6,15 @@ import sympy
 from sympy.parsing.sympy_parser import (implicit_multiplication_application,
                                         parse_expr, standard_transformations)
 import requests
+from celery import Celery
 from cqhttp import CQHttp
-import latexify
+import redis
+import tasks
 
 bot = CQHttp(api_root='http://192.168.56.101:5700/')
 application = bot.wsgi
-repeat_count = dict()
+r = redis.Redis(host='127.0.0.1', port=6379, db=0)
+
 latex_packages = ("bm", "array", "amsfonts", "amsmath", "amssymb", "mathtools", "tikz-cd", "mathrsfs", "xcolor", "mathdots")
 help_string = "所有命令以'> '开头。命令列表：\n" +\
     "   > calc: 符号计算ascii数学表达式，允许使用字母变量。相乘必须用*不能连起来；幂函数必须用**不能用^。单字母常量首字母大写：E, pi, I。oo是无穷大∞。积分 integrate(表达式, (变量, 下界, 上界)) 或者 integrate(表达式, 变量)；微分 diff(表达式, 变量, 变量, 变量, ...)，如diff(sin(x), x, x, x)表示对sin(x)求x的三阶导；求和 Sum(表达式, (变量, 下界, 上界)).doit()，不加doit()不会计算。更多功能参见sympy.org。注意这些计算都是符号计算，数值计算可以用.n()或者数值计算方法，如nsolve等。\n" +\
@@ -29,31 +29,12 @@ def clamp(s, l=200):
         return s[:l] + " ..."
     return s
 
-def render_latex_and_send(res, event):
-        try:
-            filename = "TEMP" + hex(hash(res) ^ time.time_ns())[1:]
-            latexify.latexify(res, filename="./img/" + filename, definitions="\\textwidth=7cm", usepackage=latex_packages)
-            # print("Sync", requests.get("http://192.168.56.101:5679/sync"))
-            try:
-                bot.delete_msg(message_id=event['message_id'])
-            except Exception:
-                print("Failed to recall latex spam.")
-            return {'reply': f"[CQ:image,file=file:///G:\\{filename}.jpeg]", 'auto_escape': False, 'at_sender': True}
-        except RuntimeError as e:
-            bot.send_private_msg(user_id=event['user_id'], message=event['message'])
-            bot.send_private_msg(user_id=event['user_id'], message = "错误如下：\n" + str(e).strip(), auto_escape=True)
-            try:
-                bot.delete_msg(message_id=event['message_id'])
-            except Exception:
-                print("Failed to recall latex spam.")
-            return {'reply': 'LaTeX有错，已发私聊'}
-
 @bot.on_message
 def handle_msg(event):
     if random.randint(1,30) == 1:
         bot.clean_data_dir(data_dir="image")
     if event['message_type'] == "group":
-        try:
+        #try:
             if (event['message'][-3:].lower() == 'dai' \
             or (pinyin.get(''.join(filter(lambda c: '\u4e00' <= c <= '\u9fff', event['message'])), format="strip").strip("。，？（！…—；：“”‘’《》～·）()").strip())[-3:] == 'dai'):
                 if random.randint(1,2) == 2:
@@ -101,45 +82,55 @@ def handle_msg(event):
                         return {"reply": "有点太长了，已发私聊"}
                     return {"reply": reply.text.strip(), "auto_escape": True}
                 if c == 'Render':
-                    return render_latex_and_send(comm[6:].strip(), event)
+                    tasks.render_latex_and_send.delay(comm[6:].strip(), event, latex_packages)
+                    return
                 if c == 'Latex':
-                    return render_latex_and_send(f"$\\displaystyle {comm[5:].srtip()}$", event)
+                    tasks.render_latex_and_send.delay(f"$\\displaystyle {comm[5:].strip()}$", event, latex_packages)
+                    return
                 return {'reply': "憨批（试下 > help", 'auto_escape': True}
-            if event['group_id'] in repeat_count:
-                # count the number of last repeat
-                if repeat_count[event['group_id']][0] == str(event['raw_message']):
-                    repeat_count[event['group_id']][1] += 1
-                else:
-                    repeat_count[event['group_id']][0] = str(event['raw_message'])
-                    if repeat_count[event['group_id']][1] > 1:
-                        repeat_count[event['group_id']][1] = 0
-                        if random.randint(1, 5) == 2:
-                            return {'reply': "打断复读的事屑（确信", 'at_sender': False, 'auto_escape': True}
-                        if random.randint(1, 7) == 6:
-                            return {'reply': "？？", 'at_sender': False, 'auto_escape': True}
-                    repeat_count[event['group_id']][1] = 1
-                if repeat_count[event['group_id']][1] >= 7:
-                    repeat_count[event['group_id']][1] = 0
-                    return {'reply': "适度复读活跃气氛，过度复读影响交流。为了您和他人的健康，请勿过量复读。", 'at_sender': False, 'auto_escape': True}
-            else:
-                repeat_count[event['group_id']] = [str(event['raw_message']), 1]
-            if random.randint(1, repeat_count[event['group_id']][1]+1) >= 3:
-                repeat_count[event['group_id']][1] = 0 # prevent spamming
-                if random.randint(1, 30) == 4:
-                    return {'reply': "复  读  大  失  败", 'at_sender': False, 'auto_escape': True}
-                if random.randint(1, 10) == 1:
-                    return {'reply': "（", 'at_sender': False, 'auto_escape': True}
-                if random.randint(1, 20) == 33:
-                    return {'reply': "打断（（", 'at_sender': False, 'auto_escape': True}
-                return {'reply': event['raw_message'], 'at_sender': False, 'auto_escape': False}
+            try:
+                with r.lock('repeat', blocking_timeout=5) as lock:
+                    # code you want executed only after the lock has been acquired
+                    if rc := r.get("repeat" + str(event['group_id'])):
+                        rcount = int(r.get("count" + str(event['group_id'])).decode('utf-8'))
+                        # count the number of last repeat
+                        if rc.decode('utf-8') == str(event['raw_message']):
+                            r.incr("count" + str(event['group_id']))
+                        else:
+                            r.set("repeat" + str(event['group_id']), str(event['raw_message']))
+                            if rcount > 1:
+                                r.set("count" + str(event['group_id']), 0)
+                                if random.randint(1, 5) == 2:
+                                    return {'reply': "打断复读的事屑（确信", 'at_sender': False, 'auto_escape': True}
+                                if random.randint(1, 7) == 6:
+                                    return {'reply': "？？", 'at_sender': False, 'auto_escape': True}
+                                r.set("count" + str(event['group_id']), 1)
+                        if rcount >= 7:
+                            r.set("count" + str(event['group_id']), 0)
+                            return {'reply': "适度复读活跃气氛，过度复读影响交流。为了您和他人的健康，请勿过量复读。", 'at_sender': False, 'auto_escape': True}
+                        if random.randint(1, rcount+1) >= 3:
+                            r.set("count" + str(event['group_id']), 0) # prevent spamming
+                            if random.randint(1, 30) == 4:
+                                return {'reply': "复  读  大  失  败", 'at_sender': False, 'auto_escape': True}
+                            if random.randint(1, 10) == 1:
+                                return {'reply': "（", 'at_sender': False, 'auto_escape': True}
+                            if random.randint(1, 20) == 33:
+                                return {'reply': "打断（（", 'at_sender': False, 'auto_escape': True}
+                            return {'reply': event['raw_message'], 'at_sender': False, 'auto_escape': False}
+                    else:
+                        r.set("repeat" + str(event['group_id']), str(event['raw_message']))
+                        r.set("count" + str(event['group_id']), 1)
+            except redis.lock.LockError:
+                print("LockError occured")
+                return
             if random.randint(1, 455) == 44 and event['group_id'] == 730695976:
                 return {'reply': "3倍ice cream☆☆！！！", 'at_sender': False, 'auto_escape': True}
             if random.randint(1, 360) == 144 and event['group_id'] == 730695976:
                 return {'reply': "爬", 'at_sender': False, 'auto_escape': True}
             if random.randint(1, 1000) == 111 and event['group_id'] == 80852074:
                 return {'reply': "最喜欢qlbf了（", "at_sender": False, 'auto_escape': True}
-        except Exception as e:
-            return {'reply': '报错了qaq: ' + clamp(str(e)), 'at_sender': False, 'auto_escape': True}
+        #except Exception as e:
+        #    return {'reply': f'报错了qaq: {str(type(e))}\n{clamp(str(e))}', 'at_sender': False, 'auto_escape': True}
     elif event['message_type'] == "private":
         bot.send_private_msg(message=help_string, user_id=event['user_id'], auto_escape=True)
         return {'reply': "Bot几乎只有群聊功能"}

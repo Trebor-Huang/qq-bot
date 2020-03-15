@@ -1,3 +1,4 @@
 img/
+dump.rdb
 .DS_Store
 __pycache__/
