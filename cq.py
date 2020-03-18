@@ -16,7 +16,7 @@ application = bot.wsgi
 r = redis.Redis(host='127.0.0.1', port=6379, db=0)
 
 latex_packages = ("bm", "array", "amsfonts", "amsmath", "amssymb", "mathtools", "tikz-cd", "mathrsfs", "xcolor", "mathdots")
-help_string = "所有命令以'> '开头。命令列表：\n" +\
+help_string = "所有命令以'> '开头，且均支持群聊和私聊使用。命令列表：\n" +\
     "   > calc: 符号计算ascii数学表达式，允许使用字母变量。相乘必须用*不能连起来；幂函数必须用**不能用^。单字母常量首字母大写：E, pi, I。oo是无穷大∞。积分 integrate(表达式, (变量, 下界, 上界)) 或者 integrate(表达式, 变量)；微分 diff(表达式, 变量, 变量, 变量, ...)，如diff(sin(x), x, x, x)表示对sin(x)求x的三阶导；求和 Sum(表达式, (变量, 下界, 上界)).doit()，不加doit()不会计算。更多功能参见sympy.org。注意这些计算都是符号计算，数值计算可以用.n()或者数值计算方法，如nsolve等。\n" +\
     "   > render: 渲染LaTeX文字并以图片形式发送。这个功能是为方便文字公式相间，如果只希望渲染数学公式请用latex命令。\n"+\
     "   > latex: 渲染单个数学公式。\n"+\
@@ -34,64 +34,63 @@ def clamp(s, l=200):
 def handle_msg(event):
     if random.randint(1,30) == 1:
         bot.clean_data_dir(data_dir="image")
+    if event['message'][0:2] == '> ':
+        # command mode
+        comm = event['message'][2:].replace("&#91;", "[").replace("&#93;", "]").replace("&amp;", '&')
+        comms = comm.split()
+        c = comms[0].capitalize()
+        if c == 'Help':
+            cms = comm[4:].strip()
+            if cms == '':
+                bot.send_private_msg(message=help_string, user_id=event['user_id'], auto_escape=True)
+                return {'reply': "帮助已发送至私聊"}
+            if any(['\u4e00' <= c <= '\u9fff' for c in comm]):
+                return {'reply': "不支持汉字变量的计算。"}
+            res = parse_expr(comm[4:].strip())
+            if not res.__doc__:
+                return {'reply': "这个东西没有帮助文档诶"}
+            bot.send_private_msg(message=f"这个对象：\n\n{str(res)}\n\n的帮助文档如下：", user_id=event['user_id'], auto_escape=True)
+            tasks.send_rst_doc.delay(comm[4:].strip(), res.__doc__, event)
+            return {'reply': "帮助已发送至私聊", 'auto_escape': True}
+        if c == 'Echo' and event['user_id'] == 2300936257:
+            return {'reply': comm[4:].strip(), 'at_sender': False, 'auto_escape': True}
+        if c == 'Eval' and event['user_id'] == 2300936257:
+            res = eval(comm[4:].strip(), globals(), numpy.__dict__)
+            return {'reply': str(res), 'at_sender': False, 'auto_escape': True}
+        if c == 'Calc':
+            if '^' in comm:
+                bot.send(event, message="^是异或的符号，**是幂，你确定吗？")
+            if any(['\u4e00' <= c <= '\u9fff' for c in comm]):
+                return {'reply': "不支持汉字变量的计算。"}
+            res = parse_expr(comm[4:].strip())
+            return {'reply': clamp(str(res)), 'auto_escape': True}
+        if c == 'Ord':
+            reply = requests.get("http://192.168.56.101:5679/ord", params={"cmd": comm[3:].strip()})
+            reply_text = reply.text.strip()
+            if len(reply_text) > 100:
+                bot.send_private_msg(message=reply_text, auto_escape=True, user_id=event['user_id'])
+                return {"reply": "有点太长了，已发私聊"}
+            return {"reply": reply.text.strip(), "auto_escape": True}
+        if c == 'Render':
+            tasks.render_latex_and_send.delay(comm[6:].strip(), event, latex_packages)
+            return
+        if c == 'Latex':
+            tasks.render_latex_and_send.delay(f"$\\displaystyle {comm[5:].strip()}$", event, latex_packages)
+            return
+        if c == 'Render-r':
+            tasks.render_latex_and_send.delay(comm[8:].strip(), event, latex_packages, True)
+            return
+        if c == 'Latex-r':
+            tasks.render_latex_and_send.delay(f"$\\displaystyle {comm[7:].strip()}$", event, latex_packages, True)
+            return
+        return {'reply': "憨批（试下 > help", 'auto_escape': True}
     if event['message_type'] == "group":
         try:
             if (event['message'][-3:].lower() == 'dai' \
             or (pinyin.get(''.join(filter(lambda c: '\u4e00' <= c <= '\u9fff', event['message'])), format="strip").strip("。，？（！…—；：“”‘’《》～·）()").strip())[-3:] == 'dai'):
                 if random.randint(1,2) == 2:
                     return {'reply': "Daisuke~", 'at_sender': False, 'auto_escape': True}
-            if event['message'][0:2] == '> ':
-                # command mode
-                comm = event['message'][2:].replace("&#91;", "[").replace("&#93;", "]").replace("&amp;", '&')
-                comms = comm.split()
-                c = comms[0].capitalize()
-                if c == 'Help':
-                    cms = comm[4:].strip()
-                    if cms == '':
-                        bot.send_private_msg(message=help_string, user_id=event['user_id'], auto_escape=True)
-                        return {'reply': "帮助已发送至私聊"}
-                    if any(['\u4e00' <= c <= '\u9fff' for c in comm]):
-                        return {'reply': "不支持汉字变量的计算。"}
-                    res = parse_expr(comm[4:].strip())
-                    if not res.__doc__:
-                        return {'reply': "这个东西没有帮助文档诶"}
-                    bot.send_private_msg(message=f"这个对象：\n\n{str(res)}\n\n的帮助文档如下：", user_id=event['user_id'], auto_escape=True)
-                    tasks.send_rst_doc.delay(comm[4:].strip(), res.__doc__, event)
-                    return {'reply': "帮助已发送至私聊", 'auto_escape': True}
-                if c == 'Echo' and event['user_id'] == 2300936257:
-                    return {'reply': comm[4:].strip(), 'at_sender': False, 'auto_escape': True}
-                ## These are dangerous leaky operations, and only I can use it.
-                if c == 'Eval' and event['user_id'] == 2300936257:
-                    res = eval(comm[4:].strip(), globals(), numpy.__dict__)
-                    return {'reply': str(res), 'at_sender': False, 'auto_escape': True}
-                if c == 'Calc':
-                    if '^' in comm:
-                        bot.send(event, message="^是异或的符号，**是幂，你确定吗？")
-                    if any(['\u4e00' <= c <= '\u9fff' for c in comm]):
-                        return {'reply': "不支持汉字变量的计算。"}
-                    res = parse_expr(comm[4:].strip())
-                    return {'reply': clamp(str(res)), 'auto_escape': True}
-                if c == 'Ord':
-                    reply = requests.get("http://192.168.56.101:5679/ord", params={"cmd": comm[3:].strip()})
-                    reply_text = reply.text.strip()
-                    if len(reply_text) > 100:
-                        bot.send_private_msg(message=reply_text, auto_escape=True, user_id=event['user_id'])
-                        return {"reply": "有点太长了，已发私聊"}
-                    return {"reply": reply.text.strip(), "auto_escape": True}
-                if c == 'Render':
-                    tasks.render_latex_and_send.delay(comm[6:].strip(), event, latex_packages)
-                    return
-                if c == 'Latex':
-                    tasks.render_latex_and_send.delay(f"$\\displaystyle {comm[5:].strip()}$", event, latex_packages)
-                    return
-                if c == 'Render-r':
-                    tasks.render_latex_and_send.delay(comm[8:].strip(), event, latex_packages, True)
-                    return
-                if c == 'Latex-r':
-                    tasks.render_latex_and_send.delay(f"$\\displaystyle {comm[7:].strip()}$", event, latex_packages, True)
-                    return
-                return {'reply': "憨批（试下 > help", 'auto_escape': True}
-            try:
+            try:  # 复读
                 with r.lock('repeat', blocking_timeout=5) as _:
                     # code you want executed only after the lock has been acquired
                     if rc := r.get("repeat" + str(event['group_id'])):
@@ -134,10 +133,10 @@ def handle_msg(event):
             if random.randint(1, 1000) == 111 and event['group_id'] == 80852074:
                 return {'reply': "最喜欢qlbf了（", "at_sender": False, 'auto_escape': True}
         except Exception as e:
-            return {'reply': f'报错了qaq: {str(type(e))}\n{clamp(str(e))}', 'at_sender': False, 'auto_escape': True}
+            return {'reply': f'报错了qaq: {str(type(e))}\n{clamp(str(e))}', 'auto_escape': True}
     elif event['message_type'] == "private":
         bot.send_private_msg(message=help_string, user_id=event['user_id'], auto_escape=True)
-        return {'reply': "Bot几乎只有群聊功能"}
+        return
 
 
 @bot.on_notice('group_increase')
