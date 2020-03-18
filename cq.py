@@ -49,7 +49,7 @@ def handle_msg(event):
             res = parse_expr(comm[4:].strip())
             if not res.__doc__:
                 return {'reply': "这个东西没有帮助文档诶"}
-            bot.send_private_msg(message=f"这个对象：\n\n{str(res)}\n\n的帮助文档如下：", user_id=event['user_id'], auto_escape=True)
+            bot.send_private_msg(message=f"这个对象：\n\n{str(res)}\n\n的帮助文档如下，请稍等：", user_id=event['user_id'], auto_escape=True)
             tasks.send_rst_doc.delay(res.__doc__, event)
             return None if event['message_type'] == "private" else {'reply': "帮助已发送至私聊"}
         if c == 'Echo' and event['user_id'] == 2300936257:

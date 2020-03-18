@@ -1,6 +1,7 @@
-import os, time, requests
+import os, time, requests, re
 from celery_config import app
 
+pattern = re.compile(r"(.+)\n    =+")
 class LittleBot:
     """A small version of the bot that only sends to the http api. This avoids the flask server setup and so can be jsonified."""
     def __init__(self, api_root):
@@ -92,7 +93,14 @@ def render_latex_and_send(res, event, latex_packages, resend=False, definitions=
 
 @app.task
 def send_rst_doc(doc, event):
-    r = render_latex_and_send("\\begin{verbatim}\n    " + doc.strip() + "\n\\end{verbatim}", event, (), definitions="")
+    r = []
+    isTitle = False
+    for i in pattern.split(doc):
+        isTitle = not isTitle
+        if isTitle:
+            r.append(render_latex_and_send("\\begin{verbatim}\n    " + i + "\n\\end{verbatim}", {"user_id": event["user_id"], "message_type": "private"}, (), definitions=""))
+        else:
+            bot.send_private_msg(user_id=event['user_id'], message=i.strip()+"\n" + "="*len(i.strip()), auto_escape=False)
     return r
 
 @app.task

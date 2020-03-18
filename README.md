@@ -31,7 +31,6 @@ I do not want to put a LaTeX distribution in my small virtual machine, so the ma
 
 ## Further developments
 
- - The documentation of some sympy objects are too long to send in QQ. We need to either send seperate pieces of message (of which I need to find the appropriate size and seperation methods) or convert the doc to image format.
  - It is requested that a type checker (for system F? MLTT?) be included.
  - It is requested that (at least the safe version of) Haskell compiling be included.
  - The code is actually very messy.
