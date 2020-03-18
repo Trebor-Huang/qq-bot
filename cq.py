@@ -20,6 +20,7 @@ help_string = "所有命令以'> '开头。命令列表：\n" +\
     "   > calc: 符号计算ascii数学表达式，允许使用字母变量。相乘必须用*不能连起来；幂函数必须用**不能用^。单字母常量首字母大写：E, pi, I。oo是无穷大∞。积分 integrate(表达式, (变量, 下界, 上界)) 或者 integrate(表达式, 变量)；微分 diff(表达式, 变量, 变量, 变量, ...)，如diff(sin(x), x, x, x)表示对sin(x)求x的三阶导；求和 Sum(表达式, (变量, 下界, 上界)).doit()，不加doit()不会计算。更多功能参见sympy.org。注意这些计算都是符号计算，数值计算可以用.n()或者数值计算方法，如nsolve等。\n" +\
     "   > render: 渲染LaTeX文字并以图片形式发送。这个功能是为方便文字公式相间，如果只希望渲染数学公式请用latex命令。\n"+\
     "   > latex: 渲染单个数学公式。\n"+\
+    "   > render-r/latex-r: 同上，会将群聊中撤回的LaTeX私聊发回\n"+\
     "   > ord:  序数运算。\n"+\
     "   > help: 不加参数：展示这个帮助；添加一个数学表达式作为参数：展示这个表达式的帮助文档（如果有）。\n\n"+\
     "附加功能：\n   - 复读"
@@ -34,7 +35,7 @@ def handle_msg(event):
     if random.randint(1,30) == 1:
         bot.clean_data_dir(data_dir="image")
     if event['message_type'] == "group":
-        #try:
+        try:
             if (event['message'][-3:].lower() == 'dai' \
             or (pinyin.get(''.join(filter(lambda c: '\u4e00' <= c <= '\u9fff', event['message'])), format="strip").strip("。，？（！…—；：“”‘’《》～·）()").strip())[-3:] == 'dai'):
                 if random.randint(1,2) == 2:
@@ -83,9 +84,15 @@ def handle_msg(event):
                 if c == 'Latex':
                     tasks.render_latex_and_send.delay(f"$\\displaystyle {comm[5:].strip()}$", event, latex_packages)
                     return
+                if c == 'Render-r':
+                    tasks.render_latex_and_send.delay(comm[8:].strip(), event, latex_packages, True)
+                    return
+                if c == 'Latex-r':
+                    tasks.render_latex_and_send.delay(f"$\\displaystyle {comm[7:].strip()}$", event, latex_packages, True)
+                    return
                 return {'reply': "憨批（试下 > help", 'auto_escape': True}
             try:
-                with r.lock('repeat', blocking_timeout=5) as lock:
+                with r.lock('repeat', blocking_timeout=5) as _:
                     # code you want executed only after the lock has been acquired
                     if rc := r.get("repeat" + str(event['group_id'])):
                         rcount = int(r.get("count" + str(event['group_id'])).decode('utf-8'))
@@ -101,6 +108,7 @@ def handle_msg(event):
                                 if random.randint(1, 7) == 6:
                                     return {'reply': "？？", 'at_sender': False, 'auto_escape': True}
                                 r.set("count" + str(event['group_id']), 1)
+                                return
                         if rcount >= 7:
                             r.set("count" + str(event['group_id']), 0)
                             return {'reply': "适度复读活跃气氛，过度复读影响交流。为了您和他人的健康，请勿过量复读。", 'at_sender': False, 'auto_escape': True}
@@ -125,8 +133,8 @@ def handle_msg(event):
                 return {'reply': "爬", 'at_sender': False, 'auto_escape': True}
             if random.randint(1, 1000) == 111 and event['group_id'] == 80852074:
                 return {'reply': "最喜欢qlbf了（", "at_sender": False, 'auto_escape': True}
-        #except Exception as e:
-        #    return {'reply': f'报错了qaq: {str(type(e))}\n{clamp(str(e))}', 'at_sender': False, 'auto_escape': True}
+        except Exception as e:
+            return {'reply': f'报错了qaq: {str(type(e))}\n{clamp(str(e))}', 'at_sender': False, 'auto_escape': True}
     elif event['message_type'] == "private":
         bot.send_private_msg(message=help_string, user_id=event['user_id'], auto_escape=True)
         return {'reply': "Bot几乎只有群聊功能"}
@@ -137,12 +145,20 @@ def handle_group_increase(event):
     print(event)
     if event['group_id'] == 80852074 and event['sub_type'] == "invite" and event['operator_id'] == 1289817086:
         bot.send(event, message='神音姐姐又拉人了', auto_escape=True)
+    if event['user_id'] == event['self_id']:
+        tasks.reject_unfamiliar_group(event['group_id'])
     return
 
-@bot.on_request('group', 'friend')
-def handle_request(event):
+@bot.on_request('friend')
+def handle_friend_request(event):
+    bot.send_private_msg(user_id=2300936257, message=str(event), auto_escape=True)
+    return {'approve': True}
+
+@bot.on_request('group')
+def handle_group_request(event):
     print(event)
-    return #{'approve': True}
+    tasks.reject_unfamiliar_group.delay(event['group_id'])
+    return {'approve': True}
 
 if __name__ == "__main__":
     bot.run(host='127.0.0.1', port=8099, debug=True)

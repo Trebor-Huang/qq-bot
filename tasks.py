@@ -51,9 +51,9 @@ def latexify(source, filename, size=512, verbose=False, **preamble):
 def get_preamble(usepackage=None, definitions=""):
     if usepackage is None:
         usepackage = ()
-    definitions += "\n\\newcommand{\\R}{\\mathbb R}\n\\newcommand{\\Q}{\\mathbb Q}\n\\newcommand{\\Z}{\\mathbb Z}\n\\newcommand{\\N}{\\mathbb N}"
+    definitions += "\n\\newcommand{\\R}{\\mathbb R}\n\\newcommand{\\Q}{\\mathbb Q}\n\\newcommand{\\Z}{\\mathbb Z}\n\\newcommand{\\N}{\\mathbb N}\n\\newcommand{\\e}{\\mathrm e}"
     usepackage += ("amssymb", "amsmath", "amsfonts")
-    return r"\documentclass[varwidth,border=1pt]{standalone}" + \
+    return r"\documentclass[varwidth,border=2pt]{standalone}" + \
       "\n\\usepackage{" + ", ".join(usepackage) + "}\n\\usepackage{xeCJK}\n" + definitions + "\n\\begin{document}\n"
 
 def pdf_doc(title, doc):
@@ -78,7 +78,7 @@ def render_latex_and_send(res, event, latex_packages, resend=False):
                 bot.send_private_msg(user_id=event['user_id'], message=event['message'])
         except Exception:
             print("Failed to recall latex spam.")
-        bot.send(event=event, message=f"[CQ:image,file=file:///G:\\{filename}.jpeg]", auto_escape=False)
+        bot.send(event=event, message=f"[CQ:image,file=file:///G:\\{filename}.jpeg]", auto_escape=False, at_sender=True)
         return 0, r, os.system("rm ./img/*.jpeg")
     except RuntimeError as e:
         bot.send_private_msg(user_id=event['user_id'], message=event['message'])
@@ -87,7 +87,7 @@ def render_latex_and_send(res, event, latex_packages, resend=False):
             bot.delete_msg(message_id=event['message_id'])
         except Exception:
             print("Failed to recall latex spam.")
-        bot.send(event=event, message="LaTeX有误")
+        bot.send(event=event, message="LaTeX有误", at_sender=True)
         return 1
 
 @app.task
@@ -101,7 +101,21 @@ def send_rst_doc(title, doc, event):
         bot.send_private_msg(user_id=event["user_id"], message=f"[CQ:image,file=file:///G:\\{title}.jpeg]", auto_escape=False)
     r1 = os.system("rm ./img/*.jpeg")
     return r, r1
-        
+
+@app.task
+def reject_unfamiliar_group(group_id):
+    while True:
+        try:
+            l = bot.get_group_member_list(group_id=group_id)
+            print("Success.")
+            break
+        except RuntimeError:
+            print('Error in getting group members.')
+            time.sleep(0.5)
+    if all(u['user_id'] != 2300936257 for u in l):
+        bot.send_group_msg(group_id=group_id, message="只有主人Trebor在的群我才能去qaq")
+        bot.set_group_leave(group_id=group_id)
+
 
 if __name__ == "__main__":
     print(latexify(r"你好！$\displaystyle \int_{-\infty}^\infty e^{-x^2} = \sqrt{\pi}.$Yes.", "test", verbose=False))
