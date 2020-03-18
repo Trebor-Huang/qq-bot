@@ -43,15 +43,15 @@ def handle_msg(event):
             cms = comm[4:].strip()
             if cms == '':
                 bot.send_private_msg(message=help_string, user_id=event['user_id'], auto_escape=True)
-                return {'reply': "帮助已发送至私聊"}
+                return None if event['message_type'] == "private" else {'reply': "帮助已发送至私聊"}
             if any(['\u4e00' <= c <= '\u9fff' for c in comm]):
                 return {'reply': "不支持汉字变量的计算。"}
             res = parse_expr(comm[4:].strip())
             if not res.__doc__:
                 return {'reply': "这个东西没有帮助文档诶"}
             bot.send_private_msg(message=f"这个对象：\n\n{str(res)}\n\n的帮助文档如下：", user_id=event['user_id'], auto_escape=True)
-            tasks.send_rst_doc.delay(comm[4:].strip(), res.__doc__, event)
-            return {'reply': "帮助已发送至私聊", 'auto_escape': True}
+            tasks.send_rst_doc.delay(res.__doc__, event)
+            return None if event['message_type'] == "private" else {'reply': "帮助已发送至私聊"}
         if c == 'Echo' and event['user_id'] == 2300936257:
             return {'reply': comm[4:].strip(), 'at_sender': False, 'auto_escape': True}
         if c == 'Eval' and event['user_id'] == 2300936257:
@@ -63,11 +63,11 @@ def handle_msg(event):
             if any(['\u4e00' <= c <= '\u9fff' for c in comm]):
                 return {'reply': "不支持汉字变量的计算。"}
             res = parse_expr(comm[4:].strip())
-            return {'reply': clamp(str(res)), 'auto_escape': True}
+            return {'reply': clamp(str(res), l=200000 if event['message_type'] == 'private' else 200), 'auto_escape': True}
         if c == 'Ord':
             reply = requests.get("http://192.168.56.101:5679/ord", params={"cmd": comm[3:].strip()})
             reply_text = reply.text.strip()
-            if len(reply_text) > 100:
+            if len(reply_text) > 100 and event['message_type'] != 'private':
                 bot.send_private_msg(message=reply_text, auto_escape=True, user_id=event['user_id'])
                 return {"reply": "有点太长了，已发私聊"}
             return {"reply": reply.text.strip(), "auto_escape": True}
@@ -75,7 +75,7 @@ def handle_msg(event):
             tasks.render_latex_and_send.delay(comm[6:].strip(), event, latex_packages)
             return
         if c == 'Latex':
-            tasks.render_latex_and_send.delay(f"$\\displaystyle {comm[5:].strip()}$", event, latex_packages)
+            tasks.render_latex_and_send.delay(f"$\\displaystyle {comm[5:].strip()}$", event, latex_packages, definitions="")
             return
         if c == 'Render-r':
             tasks.render_latex_and_send.delay(comm[8:].strip(), event, latex_packages, True)

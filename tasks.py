@@ -68,10 +68,10 @@ def pdf_doc(title, doc):
 
 
 @app.task
-def render_latex_and_send(res, event, latex_packages, resend=False):
+def render_latex_and_send(res, event, latex_packages, resend=False, definitions=None):
     try:
         filename = "TEMP" + hex(hash(res) ^ time.time_ns())[1:]
-        r = latexify(res, filename="./img/" + filename, definitions="\\textwidth=7cm", usepackage=latex_packages)
+        r = latexify(res, filename="./img/" + filename, definitions="\\textwidth=7cm" if definitions is None else definitions, usepackage=latex_packages)
         try:
             bot.delete_msg(message_id=event['message_id'])
             if resend:
@@ -91,16 +91,9 @@ def render_latex_and_send(res, event, latex_packages, resend=False):
         return 1
 
 @app.task
-def send_rst_doc(title, doc, event):
-    r = pdf_doc(title, doc)
-    i = 0
-    while os.path.isfile(f"./img/{title}-{i}.jpeg"):
-        bot.send_private_msg(user_id=event["user_id"], message=f"[CQ:image,file=file:///G:\\{title}-{i}.jpeg]", auto_escape=False)
-        i += 1
-    if os.path.isfile(f"./img/{title}.jpeg"):
-        bot.send_private_msg(user_id=event["user_id"], message=f"[CQ:image,file=file:///G:\\{title}.jpeg]", auto_escape=False)
-    r1 = os.system("rm ./img/*.jpeg")
-    return r, r1
+def send_rst_doc(doc, event):
+    r = render_latex_and_send("\\begin{verbatim}\n    " + doc.strip() + "\n\\end{verbatim}", event, (), definitions="")
+    return r
 
 @app.task
 def reject_unfamiliar_group(group_id):
