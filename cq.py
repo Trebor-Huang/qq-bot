@@ -3,8 +3,7 @@ import time
 import numpy
 import pinyin
 import sympy
-from sympy.parsing.sympy_parser import (implicit_multiplication_application,
-                                        parse_expr, standard_transformations)
+from sympy.parsing.sympy_parser import parse_expr
 import requests
 from celery import Celery
 from cqhttp import CQHttp
@@ -31,8 +30,14 @@ def clamp(s, l=200):
         return s[:l] + " ..."
     return s
 
+def evaluate_user(user_id):
+    timeouts = r.get("timeout" + str(user_id))
+    return timeouts is None or int(timeouts) <= 3
+
 @bot.on_message
 def handle_msg(event):
+    if not evaluate_user(event['user_id']):
+        return {'reply': "触发防滥用机制，请联系主人解除；在群内发送女装照片可自动解除", 'at_user': True, 'auto_escape': True}
     if random.randint(1,30) == 1:
         bot.clean_data_dir(data_dir="image")
     if event['message'][0:2] == '> ':
@@ -60,12 +65,8 @@ def handle_msg(event):
                 res = eval(comm[4:].strip(), globals(), numpy.__dict__)
                 return {'reply': str(res), 'at_sender': False, 'auto_escape': True}
             if c == 'Calc':
-                if '^' in comm:
-                    bot.send(event, message="^是异或的符号，**是幂，你确定吗？")
-                if any(['\u4e00' <= c <= '\u9fff' for c in comm]):
-                    return {'reply': "不支持汉字变量的计算。"}
-                res = parse_expr(comm[4:].strip())
-                return {'reply': clamp(str(res), l=200000 if event['message_type'] == 'private' else 200), 'auto_escape': True}
+                tasks.calc_sympy.delay(comm, event)
+                return
             if c == 'Ord':
                 reply = requests.get("http://192.168.56.101:5679/ord", params={"cmd": comm[3:].strip()})
                 reply_text = reply.text.strip()
@@ -105,6 +106,8 @@ def handle_msg(event):
             or (pinyin.get(''.join(filter(lambda c: '\u4e00' <= c <= '\u9fff', event['message'])), format="strip").strip("。，？（！…—；：“”‘’《》～·）()").strip())[-3:] == 'dai'):
                 if random.randint(1,2) == 2:
                     return {'reply': "Daisuke~", 'at_sender': False, 'auto_escape': True}
+            if '贴贴' in event['message'] and event['user_id'] == 1458814497:
+                return {'reply': "（要贴贴！", 'at_sender': False, 'auto_escape': True}
             try:  # 复读
                 with r.lock('repeat', blocking_timeout=5) as _:
                     # code you want executed only after the lock has been acquired
@@ -160,7 +163,7 @@ def handle_group_increase(event):
     if event['group_id'] == 80852074 and event['sub_type'] == "invite" and event['operator_id'] == 1289817086:
         bot.send(event, message='神音姐姐又拉人了', auto_escape=True)
     if event['user_id'] == event['self_id']:
-        tasks.reject_unfamiliar_group(event['group_id'])
+        tasks.reject_unfamiliar_group.delay(event['group_id'])
     return {'reply': "（来自我介绍：我是本群计算量担当bot\n用> help可以看我的帮助文档", "at_sender": False, 'auto_escape': True}
 
 @bot.on_request('friend')

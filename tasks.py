@@ -1,5 +1,7 @@
-import os, time, requests, re
+import os, time, requests, re, redis
+from sympy.parsing.sympy_parser import parse_expr
 from celery_config import app
+from celery.exceptions import SoftTimeLimitExceeded
 
 pattern = re.compile(r"(.+)\n    =+")
 class LittleBot:
@@ -36,11 +38,27 @@ class LittleBot:
 
 bot = LittleBot('http://192.168.56.101:5700/')
 
+def timeout_record(user_id):
+    r = redis.Redis(host='127.0.0.1', port=6379, db=0)
+    r.incr("timeout" + str(user_id))
+    ex = int(r.get("timeout" + str(user_id)))
+    if ex < 3:
+        r.expire("timeout" + str(user_id), 3600 * 3 ** ex)
+    r.close()
+
+def clamp(s, l=200):
+    if len(s) > l:
+        return s[:l] + " ..."
+    return s
+
 def latexify(source, filename, size=512, verbose=False, **preamble):
     tempfilename = "TEMP" + hex(hash(source) ^ time.time_ns())[1:]
     with open(f"{tempfilename}.tex", "w") as file:
         file.write(get_preamble(**preamble) + source + "\n\\end{document}")
-    if os.system(f"xelatex -interaction nonstopmode -halt-on-error {tempfilename}.tex  > /dev/null"):
+    if r := os.system(f"gtimeout 14s xelatex -interaction nonstopmode -halt-on-error {tempfilename}.tex  > /dev/null"):
+        print(r)
+        if r == 124 or r == 128+9 or r == 31744:
+            time.sleep(15)
         with open(f"{tempfilename}.log", "r") as file:
             error = file.read()
         raise RuntimeError(error[error.find("\n!"):error.find("Here is how much of")])
@@ -57,7 +75,7 @@ def get_preamble(usepackage=None, definitions=""):
     return r"\documentclass[varwidth,border=2pt]{standalone}" + \
       "\n\\usepackage{" + ", ".join(usepackage) + "}\n\\usepackage{xeCJK}\n" + definitions + "\n\\begin{document}\n"
 
-@app.task
+@app.task(soft_time_limit=15, time_limit=20)
 def render_latex_and_send(res, event, latex_packages, resend=False, definitions=None):
     try:
         filename = "TEMP" + hex(hash(res) ^ time.time_ns())[1:]
@@ -69,7 +87,7 @@ def render_latex_and_send(res, event, latex_packages, resend=False, definitions=
         except Exception:
             print("Failed to recall latex spam.")
         bot.send(event=event, message=f"[CQ:image,file=file:///G:\\{filename}.jpeg]", auto_escape=False, at_sender=True)
-        return 0, r, os.system("rm ./img/*.jpeg")
+        return ("Success", (r, os.system("rm ./img/*.jpeg")))
     except RuntimeError as e:
         bot.send_private_msg(user_id=event['user_id'], message=event['message'])
         bot.send_private_msg(user_id=event['user_id'], message = "错误如下：\n" + str(e).strip(), auto_escape=True)
@@ -78,7 +96,12 @@ def render_latex_and_send(res, event, latex_packages, resend=False, definitions=
         except Exception:
             print("Failed to recall latex spam.")
         bot.send(event=event, message="LaTeX有误", at_sender=True)
-        return 1
+        return ("Fail",)
+    except SoftTimeLimitExceeded:
+        os.system("rm *.tex *.aux *.log *.pdf *.jpeg")
+        bot.send(event, "TLE~qwq")
+        timeout_record(event['user_id'])
+        return ("Timeout", event['user_id'])
 
 @app.task
 def send_rst_doc(doc, event):
@@ -100,6 +123,21 @@ def reject_unfamiliar_group(group_id):
         bot.send_group_msg(group_id=group_id, message="只有主人Trebor在的群我才能去qaq")
         bot.set_group_leave(group_id=group_id)
 
+@app.task(soft_time_limit=15, time_limit=20)
+def calc_sympy(comm, event):
+    try:
+        if '^' in comm:
+            bot.send(event, message="^是异或的符号，**是幂，你确定吗？")
+        if not all([c <= '\xFF' for c in comm]):
+            bot.send(event, message="只准用ascii字符，够用的quq")
+        res = parse_expr(comm[4:].strip())
+        return bot.send(event, clamp(str(res), l=20000 if event['message_type'] == 'private' else 200), auto_escape=True)
+    except SoftTimeLimitExceeded:
+        bot.send(event, "TLE~qwq")
+        timeout_record(event['user_id'])
+        return ("Timeout", event['user_id'])
+    except Exception as e:
+        return bot.send(event, f'报错了qaq: {str(type(e))}\n{clamp(str(e))}', auto_escape=True)
 
 if __name__ == "__main__":
     print(latexify(r"你好！$\displaystyle \int_{-\infty}^\infty e^{-x^2} = \sqrt{\pi}.$Yes.", "test", verbose=False))
