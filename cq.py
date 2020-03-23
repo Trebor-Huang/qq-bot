@@ -22,7 +22,8 @@ help_string = "所有命令以'> '开头，且均支持群聊和私聊使用。�
     "   > latex: 渲染单个数学公式。\n"+\
     "   > render-r/latex-r: 同上，会将群聊中撤回的LaTeX私聊发回\n"+\
     "   > ord:  序数运算。\n"+\
-    "   > help: 不加参数：展示这个帮助；添加一个数学表达式作为参数：展示这个表达式的帮助文档（如果有）。\n\n"+\
+    "   > help: 不加参数：展示这个帮助；添加一个数学表达式作为参数：展示这个表达式的帮助文档（如果有）。\n"+\
+    "   > 电: 随机禁言\\(≧▽≦)/ 命令中含有的“电”字越多期望时间越长哦～ 一个⚡算五个“电”w\n\n"+\
     "附加功能：\n   - 复读"
 
 def clamp(s, l=200):
@@ -35,55 +36,69 @@ def handle_msg(event):
     if random.randint(1,30) == 1:
         bot.clean_data_dir(data_dir="image")
     if event['message'][0:2] == '> ':
-        # command mode
-        comm = event['message'][2:].replace("&#91;", "[").replace("&#93;", "]").replace("&amp;", '&')
-        comms = comm.split()
-        c = comms[0].capitalize()
-        if c == 'Help':
-            cms = comm[4:].strip()
-            if cms == '':
-                bot.send_private_msg(message=help_string, user_id=event['user_id'], auto_escape=True)
+        try:
+            # command mode
+            comm = event['message'][2:].replace("&#91;", "[").replace("&#93;", "]").replace("&amp;", '&')
+            comms = comm.split()
+            c = comms[0].capitalize()
+            if c == 'Help':
+                cms = comm[4:].strip()
+                if cms == '':
+                    bot.send_private_msg(message=help_string, user_id=event['user_id'], auto_escape=True)
+                    return None if event['message_type'] == "private" else {'reply': "帮助已发送至私聊"}
+                if any(['\u4e00' <= c <= '\u9fff' for c in comm]):
+                    return {'reply': "不支持汉字变量的计算。"}
+                res = parse_expr(comm[4:].strip())
+                if not res.__doc__:
+                    return {'reply': "这个东西没有帮助文档诶"}
+                bot.send_private_msg(message=f"这个对象：\n\n{str(res)}\n类型是{type(res)}\n\n的帮助文档如下，请稍等：", user_id=event['user_id'], auto_escape=True)
+                tasks.send_rst_doc.delay(res.__doc__, event)
                 return None if event['message_type'] == "private" else {'reply': "帮助已发送至私聊"}
-            if any(['\u4e00' <= c <= '\u9fff' for c in comm]):
-                return {'reply': "不支持汉字变量的计算。"}
-            res = parse_expr(comm[4:].strip())
-            if not res.__doc__:
-                return {'reply': "这个东西没有帮助文档诶"}
-            bot.send_private_msg(message=f"这个对象：\n\n{str(res)}\n\n的帮助文档如下，请稍等：", user_id=event['user_id'], auto_escape=True)
-            tasks.send_rst_doc.delay(res.__doc__, event)
-            return None if event['message_type'] == "private" else {'reply': "帮助已发送至私聊"}
-        if c == 'Echo' and event['user_id'] == 2300936257:
-            return {'reply': comm[4:].strip(), 'at_sender': False, 'auto_escape': True}
-        if c == 'Eval' and event['user_id'] == 2300936257:
-            res = eval(comm[4:].strip(), globals(), numpy.__dict__)
-            return {'reply': str(res), 'at_sender': False, 'auto_escape': True}
-        if c == 'Calc':
-            if '^' in comm:
-                bot.send(event, message="^是异或的符号，**是幂，你确定吗？")
-            if any(['\u4e00' <= c <= '\u9fff' for c in comm]):
-                return {'reply': "不支持汉字变量的计算。"}
-            res = parse_expr(comm[4:].strip())
-            return {'reply': clamp(str(res), l=200000 if event['message_type'] == 'private' else 200), 'auto_escape': True}
-        if c == 'Ord':
-            reply = requests.get("http://192.168.56.101:5679/ord", params={"cmd": comm[3:].strip()})
-            reply_text = reply.text.strip()
-            if len(reply_text) > 100 and event['message_type'] != 'private':
-                bot.send_private_msg(message=reply_text, auto_escape=True, user_id=event['user_id'])
-                return {"reply": "有点太长了，已发私聊"}
-            return {"reply": reply.text.strip(), "auto_escape": True}
-        if c == 'Render':
-            tasks.render_latex_and_send.delay(comm[6:].strip(), event, latex_packages)
-            return
-        if c == 'Latex':
-            tasks.render_latex_and_send.delay(f"$\\displaystyle {comm[5:].strip()}$", event, latex_packages, definitions="")
-            return
-        if c == 'Render-r':
-            tasks.render_latex_and_send.delay(comm[8:].strip(), event, latex_packages, True)
-            return
-        if c == 'Latex-r':
-            tasks.render_latex_and_send.delay(f"$\\displaystyle {comm[7:].strip()}$", event, latex_packages, True)
-            return
-        return {'reply': "憨批（试下 > help", 'auto_escape': True}
+            if c == 'Echo' and event['user_id'] == 2300936257:
+                return {'reply': comm[4:].strip(), 'at_sender': False, 'auto_escape': True}
+            if c == 'Eval' and event['user_id'] == 2300936257:
+                res = eval(comm[4:].strip(), globals(), numpy.__dict__)
+                return {'reply': str(res), 'at_sender': False, 'auto_escape': True}
+            if c == 'Calc':
+                if '^' in comm:
+                    bot.send(event, message="^是异或的符号，**是幂，你确定吗？")
+                if any(['\u4e00' <= c <= '\u9fff' for c in comm]):
+                    return {'reply': "不支持汉字变量的计算。"}
+                res = parse_expr(comm[4:].strip())
+                return {'reply': clamp(str(res), l=200000 if event['message_type'] == 'private' else 200), 'auto_escape': True}
+            if c == 'Ord':
+                reply = requests.get("http://192.168.56.101:5679/ord", params={"cmd": comm[3:].strip()})
+                reply_text = reply.text.strip()
+                if len(reply_text) > 100 and event['message_type'] != 'private':
+                    bot.send_private_msg(message=reply_text, auto_escape=True, user_id=event['user_id'])
+                    return {"reply": "有点太长了，已发私聊"}
+                return {"reply": reply.text.strip(), "auto_escape": True}
+            if c == 'Render':
+                tasks.render_latex_and_send.delay(comm[6:].strip(), event, latex_packages)
+                return
+            if c == 'Latex':
+                tasks.render_latex_and_send.delay(f"$\\displaystyle {comm[5:].strip()}$", event, latex_packages, definitions="")
+                return
+            if c == 'Render-r':
+                tasks.render_latex_and_send.delay(comm[8:].strip(), event, latex_packages, True)
+                return
+            if c == 'Latex-r':
+                tasks.render_latex_and_send.delay(f"$\\displaystyle {comm[7:].strip()}$", event, latex_packages, True)
+                return
+            if ('电' in comm or '⚡' in comm) and event['message_type'] == "group":
+                level = comm.count("电") + 5 * comm.count("⚡")
+                invexp = 0.8**level/10
+                if invexp == 0:
+                    d = 15 * 60
+                else:
+                    d = int(random.expovariate(invexp))
+                if d > 15 * 60:
+                    d = 15 * 60
+                bot.set_group_ban(group_id = event['group_id'], user_id = event['user_id'], duration = d)
+                return {'reply': "您被电了 %s 秒！%s" % (d, "（"*min(5, level))}
+            return {'reply': "憨批（试下 > help", 'auto_escape': True}
+        except Exception as e:
+            return {'reply': f'报错了qaq: {str(type(e))}\n{clamp(str(e))}', 'auto_escape': True}
     if event['message_type'] == "group":
         try:
             if (event['message'][-3:].lower() == 'dai' \
@@ -146,7 +161,7 @@ def handle_group_increase(event):
         bot.send(event, message='神音姐姐又拉人了', auto_escape=True)
     if event['user_id'] == event['self_id']:
         tasks.reject_unfamiliar_group(event['group_id'])
-    return
+    return {'reply': "（来自我介绍：我是本群计算量担当bot\n用> help可以看我的帮助文档", "at_sender": False, 'auto_escape': True}
 
 @bot.on_request('friend')
 def handle_friend_request(event):
@@ -155,8 +170,7 @@ def handle_friend_request(event):
 
 @bot.on_request('group')
 def handle_group_request(event):
-    print(event)
-    tasks.reject_unfamiliar_group.delay(event['group_id'])
+    bot.send_private_msg(user_id=2300936257, message=str(event), auto_escape=True)
     return {'approve': True}
 
 if __name__ == "__main__":

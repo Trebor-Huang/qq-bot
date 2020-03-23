@@ -57,17 +57,6 @@ def get_preamble(usepackage=None, definitions=""):
     return r"\documentclass[varwidth,border=2pt]{standalone}" + \
       "\n\\usepackage{" + ", ".join(usepackage) + "}\n\\usepackage{xeCJK}\n" + definitions + "\n\\begin{document}\n"
 
-def pdf_doc(title, doc):
-    doc = doc.replace("\n    ", "\n")
-    docname = "DOC" + hex(hash(doc))[1:] 
-    with open(docname + ".rst", "w") as rst:
-        rst.write(doc)
-    s1 = os.system(f"rst2pdf {docname}.rst")
-    s2 = os.system(f"convert -density 256 {docname}.pdf -antialias ./img/{title}.jpeg")
-    s3 = os.system(f"rm *.rst *.pdf")
-    return (s1, s2, s3)
-
-
 @app.task
 def render_latex_and_send(res, event, latex_packages, resend=False, definitions=None):
     try:
@@ -93,15 +82,9 @@ def render_latex_and_send(res, event, latex_packages, resend=False, definitions=
 
 @app.task
 def send_rst_doc(doc, event):
-    r = []
-    isTitle = False
-    for i in pattern.split(doc):
-        isTitle = not isTitle
-        if isTitle:
-            r.append(render_latex_and_send("\\begin{verbatim}\n    " + i + "\n\\end{verbatim}", {"user_id": event["user_id"], "message_type": "private"}, (), definitions=""))
-        else:
-            bot.send_private_msg(user_id=event['user_id'], message=i.strip()+"\n" + "="*len(i.strip()), auto_escape=False)
-    return r
+    for i, d in enumerate(pattern.split(doc)):
+        bot.send_private_msg(user_id=event['user_id'], message=d + "\n" + ("    " + "="*len(d) if i%2==1 else ""), auto_escape=False)
+    return
 
 @app.task
 def reject_unfamiliar_group(group_id):
@@ -112,7 +95,7 @@ def reject_unfamiliar_group(group_id):
             break
         except RuntimeError:
             print('Error in getting group members.')
-            time.sleep(0.5)
+            time.sleep(30)
     if all(u['user_id'] != 2300936257 for u in l):
         bot.send_group_msg(group_id=group_id, message="只有主人Trebor在的群我才能去qaq")
         bot.set_group_leave(group_id=group_id)
