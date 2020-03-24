@@ -32,15 +32,15 @@ def clamp(s, l=200):
 
 def evaluate_user(user_id):
     timeouts = r.get("timeout" + str(user_id))
-    return timeouts is None or int(timeouts) <= 3
+    return timeouts is None or (int(timeouts) < 3)
 
 @bot.on_message
 def handle_msg(event):
-    if not evaluate_user(event['user_id']):
-        return {'reply': "触发防滥用机制，请联系主人解除；在群内发送女装照片可自动解除", 'at_user': True, 'auto_escape': True}
     if random.randint(1,30) == 1:
         bot.clean_data_dir(data_dir="image")
-    if event['message'][0:2] == '> ':
+    if event['message'][0:2] == '> ' and event['message'] != "> ":
+        if not evaluate_user(event['user_id']):
+            return {'reply': "不喜欢你qwq（给我发女装照片好不好quq", 'at_user': True, 'auto_escape': True}
         try:
             # command mode
             comm = event['message'][2:].replace("&#91;", "[").replace("&#93;", "]").replace("&amp;", '&')
@@ -87,16 +87,16 @@ def handle_msg(event):
                 tasks.render_latex_and_send.delay(f"$\\displaystyle {comm[7:].strip()}$", event, latex_packages, True)
                 return
             if ('电' in comm or '⚡' in comm) and event['message_type'] == "group":
-                level = comm.count("电") + 5 * comm.count("⚡")
-                invexp = 0.8**level/10
-                if invexp == 0:
-                    d = 15 * 60
-                else:
-                    d = int(random.expovariate(invexp))
-                if d > 15 * 60:
-                    d = 15 * 60
+                shock = int(r.incr("shock"))
+                r.expire("shock", 15 * 2 ** shock)
+                if shock > 10:
+                    return {'reply': "没电了qaq"}
+                level = comm.count("电") + 5 * comm.count("⚡") + shock * 1.5
+                d = int(random.gauss(15*60 + 10 * level ** 3, level * 2))
+                if d > 60 * 60:
+                    d = 60 * 60
                 bot.set_group_ban(group_id = event['group_id'], user_id = event['user_id'], duration = d)
-                return {'reply': "您被电了 %s 秒！%s" % (d, "（"*min(5, level))}
+                return {'reply': "您被电了 %s 秒！%s" % (d, "（"*int(min(5, level)))}
             return {'reply': "憨批（试下 > help", 'auto_escape': True}
         except Exception as e:
             return {'reply': f'报错了qaq: {str(type(e))}\n{clamp(str(e))}', 'auto_escape': True}

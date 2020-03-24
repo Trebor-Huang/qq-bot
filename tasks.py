@@ -40,8 +40,7 @@ bot = LittleBot('http://192.168.56.101:5700/')
 
 def timeout_record(user_id):
     r = redis.Redis(host='127.0.0.1', port=6379, db=0)
-    r.incr("timeout" + str(user_id))
-    ex = int(r.get("timeout" + str(user_id)))
+    ex = int(r.incr("timeout" + str(user_id)))
     if ex < 3:
         r.expire("timeout" + str(user_id), 3600 * 3 ** ex)
     r.close()
