@@ -10,20 +10,22 @@ from cqhttp import CQHttp
 import redis
 import tasks
 
+blacklist = ["智障", "傻逼", "傻b", "你国", "贵国", "死妈", "死🐴", "老子", "贵群", "弱智", "政治", "脑残", "尼玛"]
+
 bot = CQHttp(api_root='http://192.168.56.101:5700/')
 application = bot.wsgi
 r = redis.Redis(host='127.0.0.1', port=6379, db=0)
 
-latex_packages = ("bm", "array", "amsfonts", "amsmath", "amssymb", "mathtools", "tikz-cd", "mathrsfs", "xcolor", "mathdots")
+latex_packages = ("bm", "array", "amsfonts", "amsmath", "amssymb", "mathtools", "tikz-cd", "mathrsfs", "xcolor", "mathdots", "eufrak", "ebproof", "tikz-feynman")
 help_string = "所有命令以'> '开头，且均支持群聊和私聊使用。命令列表：\n" +\
-    "   > calc: 符号计算ascii数学表达式，允许使用字母变量。相乘必须用*不能连起来；幂函数必须用**不能用^。单字母常量首字母大写：E, pi, I。oo是无穷大∞。积分 integrate(表达式, (变量, 下界, 上界)) 或者 integrate(表达式, 变量)；微分 diff(表达式, 变量, 变量, 变量, ...)，如diff(sin(x), x, x, x)表示对sin(x)求x的三阶导；求和 Sum(表达式, (变量, 下界, 上界)).doit()，不加doit()不会计算。更多功能参见sympy.org。注意这些计算都是符号计算，数值计算可以用.n()或者数值计算方法，如nsolve等。\n" +\
-    "   > render: 渲染LaTeX文字并以图片形式发送。这个功能是为方便文字公式相间，如果只希望渲染数学公式请用latex命令。\n"+\
-    "   > latex: 渲染单个数学公式。\n"+\
-    "   > render-r/latex-r: 同上，会将群聊中撤回的LaTeX私聊发回\n"+\
-    "   > ord:  序数运算。\n"+\
-    "   > help: 不加参数：展示这个帮助；添加一个数学表达式作为参数：展示这个表达式的帮助文档（如果有）。\n"+\
-    "   > 电: 随机禁言\\(≧▽≦)/ 命令中含有的“电”字越多期望时间越长哦～ 一个⚡算五个“电”w\n\n"+\
-    "附加功能：\n   - 复读"
+    "   > calc EXPRESSION 符号计算ascii数学表达式，允许使用字母变量。相乘必须用*不能连起来；幂函数必须用**不能用^。单字母常量首字母大写：E, pi, I。oo是无穷大∞。积分 integrate(表达式, (变量, 下界, 上界)) 或者 integrate(表达式, 变量)；微分 diff(表达式, 变量, 变量, 变量, ...)，如diff(sin(x), x, x, x)表示对sin(x)求x的三阶导；求和 Sum(表达式, (变量, 下界, 上界)).doit()，不加doit()不会计算。更多功能参见sympy.org。注意这些计算都是符号计算，数值计算可以用.n()或者数值计算方法，如nsolve等。\n" +\
+    "   > render LATEX 渲染LaTeX文字并以图片形式发送。这个功能是为方便文字公式相间，如果只希望渲染数学公式请用latex命令。\n"+\
+    "   > latex LATEX_FORMULA 渲染单个数学公式。\n"+\
+    "   > render-r/latex-r 同上，会将群聊中撤回的LaTeX私聊发回\n"+\
+    "   > ord EXPRESSION  序数运算。\n"+\
+    "   > help [EXPRESSION] 不加参数：展示这个帮助；添加一个数学表达式作为参数：展示这个表达式的帮助文档（如果有）。\n"+\
+    "   > 电 随机禁言\\(≧▽≦)/ 命令中含有的“电”字越多期望时间越长哦～ 一个⚡算五个“电”w\n\n"+\
+    "附加功能：\n   - 复读\n    - 不友善禁言"
 
 def clamp(s, l=200):
     if len(s) > l:
@@ -46,6 +48,9 @@ def handle_msg(event):
             comm = event['message'][2:].replace("&#91;", "[").replace("&#93;", "]").replace("&amp;", '&')
             comms = comm.split()
             c = comms[0].capitalize()
+            if c == 'Forgive' and event['user_id'] == 2300936257:
+                r.set("timeout" + comms[1], 0)
+                return {'reply': "原谅你啦 [CQ:at,qq=%s]" % comms[1], "at_sender": False, "auto_escape":False}
             if c == 'Help':
                 cms = comm[4:].strip()
                 if cms == '':
@@ -54,6 +59,8 @@ def handle_msg(event):
                 if any(['\u4e00' <= c <= '\u9fff' for c in comm]):
                     return {'reply': "不支持汉字变量的计算。"}
                 res = parse_expr(comm[4:].strip())
+                if isinstance(res, sympy.Symbol):
+                    return {'reply': "这东西是个符号"}
                 if not res.__doc__:
                     return {'reply': "这个东西没有帮助文档诶"}
                 bot.send_private_msg(message=f"这个对象：\n\n{str(res)}\n类型是{type(res)}\n\n的帮助文档如下，请稍等：", user_id=event['user_id'], auto_escape=True)
@@ -88,20 +95,29 @@ def handle_msg(event):
                 return
             if ('电' in comm or '⚡' in comm) and event['message_type'] == "group":
                 shock = int(r.incr("shock"))
-                r.expire("shock", 15 * 2 ** shock)
                 if shock > 10:
+                    r.expire("shock", 1500)
                     return {'reply': "没电了qaq"}
+                r.expire("shock", 15 * shock**2)
                 level = comm.count("电") + 5 * comm.count("⚡") + shock * 1.5
-                d = int(random.gauss(15*60 + 10 * level ** 3, level * 2))
-                if d > 60 * 60:
-                    d = 60 * 60
+                d = int(random.gauss(15*60 + 10 * level ** 2, level * 2))
+                if d > 3 * 60 * 60:
+                    d = 3 * 60 * 60
                 bot.set_group_ban(group_id = event['group_id'], user_id = event['user_id'], duration = d)
                 return {'reply': "您被电了 %s 秒！%s" % (d, "（"*int(min(5, level)))}
             return {'reply': "憨批（试下 > help", 'auto_escape': True}
         except Exception as e:
             return {'reply': f'报错了qaq: {str(type(e))}\n{clamp(str(e))}', 'auto_escape': True}
     if event['message_type'] == "group":
+        if any(i in event['message'].lower() for i in blacklist):
+            try:
+                bot.delete_msg(message_id=event["message_id"])
+                bot.set_group_ban(group_id=event['group_id'], user_id=event['user_id'], duration=random.randint(1,10))
+            except CQHttp.Error:
+                return {"reply": "你要以身作则诶quq"}
+            return {"reply": "quq", "at_sender": False}
         try:
+            # miscellanous, lowest priority
             if (event['message'][-3:].lower() == 'dai' \
             or (pinyin.get(''.join(filter(lambda c: '\u4e00' <= c <= '\u9fff', event['message'])), format="strip").strip("。，？（！…—；：“”‘’《》～·）()").strip())[-3:] == 'dai'):
                 if random.randint(1,2) == 2:
@@ -164,7 +180,13 @@ def handle_group_increase(event):
         bot.send(event, message='神音姐姐又拉人了', auto_escape=True)
     if event['user_id'] == event['self_id']:
         tasks.reject_unfamiliar_group.delay(event['group_id'])
-    return {'reply': "（来自我介绍：我是本群计算量担当bot\n用> help可以看我的帮助文档", "at_sender": False, 'auto_escape': True}
+
+@bot.on_notice('group_decrease')
+def handle_group_decrease(event):
+    if event['group_id'] == 80852074 and event['sub_type'] == "leave":
+        tasks.calm_down.delay()
+        bot.send(message = " --- EMERGENCY SHUTDOWN --- ", event=event)
+        bot.send(message = f"> Deathrattle of user {event['user_id']} <", event=event)
 
 @bot.on_request('friend')
 def handle_friend_request(event):
@@ -174,7 +196,8 @@ def handle_friend_request(event):
 @bot.on_request('group')
 def handle_group_request(event):
     bot.send_private_msg(user_id=2300936257, message=str(event), auto_escape=True)
-    return {'approve': True}
+    if event['sub_type'] == "invite":
+        return {"approve": "True"}
 
 if __name__ == "__main__":
     bot.run(host='127.0.0.1', port=8099, debug=True)

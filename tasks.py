@@ -54,7 +54,7 @@ def latexify(source, filename, size=512, verbose=False, **preamble):
     tempfilename = "TEMP" + hex(hash(source) ^ time.time_ns())[1:]
     with open(f"{tempfilename}.tex", "w") as file:
         file.write(get_preamble(**preamble) + source + "\n\\end{document}")
-    if r := os.system(f"gtimeout 14s xelatex -interaction nonstopmode -halt-on-error {tempfilename}.tex  > /dev/null"):
+    if r := os.system(f"gtimeout 29s xelatex -interaction nonstopmode -halt-on-error {tempfilename}.tex  > /dev/null"):
         print(r)
         if r == 124 or r == 128+9 or r == 31744:
             time.sleep(15)
@@ -69,12 +69,12 @@ def latexify(source, filename, size=512, verbose=False, **preamble):
 def get_preamble(usepackage=None, definitions=""):
     if usepackage is None:
         usepackage = ()
-    definitions += "\n\\newcommand{\\R}{\\mathbb R}\n\\newcommand{\\Q}{\\mathbb Q}\n\\newcommand{\\Z}{\\mathbb Z}\n\\newcommand{\\N}{\\mathbb N}\n\\newcommand{\\e}{\\mathrm e}"
+    definitions += "\n\\newcommand{\\R}{\\mathbb R}\n\\newcommand{\\Q}{\\mathbb Q}\n\\newcommand{\\Z}{\\mathbb Z}\n\\newcommand{\\N}{\\mathbb N}\n\\newcommand{\\e}{\\mathrm e}\n\\newcommand{\\d}{\\mathrm d}"
     usepackage += ("amssymb", "amsmath", "amsfonts")
     return r"\documentclass[varwidth,border=2pt]{standalone}" + \
       "\n\\usepackage{" + ", ".join(usepackage) + "}\n\\usepackage{xeCJK}\n" + definitions + "\n\\begin{document}\n"
 
-@app.task(soft_time_limit=15, time_limit=20)
+@app.task(soft_time_limit=30, time_limit=60)
 def render_latex_and_send(res, event, latex_packages, resend=False, definitions=None):
     try:
         filename = "TEMP" + hex(hash(res) ^ time.time_ns())[1:]
@@ -84,7 +84,7 @@ def render_latex_and_send(res, event, latex_packages, resend=False, definitions=
             if resend:
                 bot.send_private_msg(user_id=event['user_id'], message=event['message'])
         except Exception:
-            print("Failed to recall latex spam.")
+            pass
         bot.send(event=event, message=f"[CQ:image,file=file:///G:\\{filename}.jpeg]", auto_escape=False, at_sender=True)
         return ("Success", (r, os.system("rm ./img/*.jpeg")))
     except RuntimeError as e:
@@ -93,7 +93,7 @@ def render_latex_and_send(res, event, latex_packages, resend=False, definitions=
         try:
             bot.delete_msg(message_id=event['message_id'])
         except Exception:
-            print("Failed to recall latex spam.")
+            pass
         bot.send(event=event, message="LaTeX有误", at_sender=True)
         return ("Fail",)
     except SoftTimeLimitExceeded:
@@ -122,6 +122,12 @@ def reject_unfamiliar_group(group_id):
         bot.send_group_msg(group_id=group_id, message="只有主人Trebor在的群我才能去qaq")
         bot.set_group_leave(group_id=group_id)
 
+@app.task
+def calm_down():
+    bot.set_group_whole_ban(group_id=80852074)
+    time.sleep(30)
+    bot.set_group_whole_ban(group_id=80852074, enable=False)
+
 @app.task(soft_time_limit=15, time_limit=20)
 def calc_sympy(comm, event):
     try:
@@ -129,6 +135,7 @@ def calc_sympy(comm, event):
             bot.send(event, message="^是异或的符号，**是幂，你确定吗？")
         if not all([c <= '\xFF' for c in comm]):
             bot.send(event, message="只准用ascii字符，够用的quq")
+            return
         res = parse_expr(comm[4:].strip())
         return bot.send(event, clamp(str(res), l=20000 if event['message_type'] == 'private' else 200), auto_escape=True)
     except SoftTimeLimitExceeded:
