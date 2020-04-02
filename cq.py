@@ -15,6 +15,8 @@ blacklist = ["智障", "傻逼", "傻b", "你国", "贵国", "死妈", "死🐴"
 bot = CQHttp(api_root='http://192.168.56.101:5700/')
 application = bot.wsgi
 r = redis.Redis(host='127.0.0.1', port=6379, db=0)
+admin = [2300936257, 1458814497]
+owner = 2300936257
 
 latex_packages = ("bm", "array", "amsfonts", "amsmath", "amssymb", "mathtools", "tikz-cd", "mathrsfs", "xcolor", "mathdots", "eufrak", "ebproof", "tikz-feynman")
 help_string = "所有命令以'> '开头，且均支持群聊和私聊使用。命令列表：\n" +\
@@ -48,7 +50,8 @@ def handle_msg(event):
             comm = event['message'][2:].replace("&#91;", "[").replace("&#93;", "]").replace("&amp;", '&')
             comms = comm.split()
             c = comms[0].capitalize()
-            if c == 'Forgive' and event['user_id'] == 2300936257:
+            if c == 'Forgive' and event['user_id'] in admin:
+                comms[1] = ''.join(list(filter(str.isnumeric, comms[1])))
                 r.set("timeout" + comms[1], 0)
                 return {'reply': "原谅你啦 [CQ:at,qq=%s]" % comms[1], "at_sender": False, "auto_escape":False}
             if c == 'Help':
@@ -66,15 +69,17 @@ def handle_msg(event):
                 bot.send_private_msg(message=f"这个对象：\n\n{str(res)}\n类型是{type(res)}\n\n的帮助文档如下，请稍等：", user_id=event['user_id'], auto_escape=True)
                 tasks.send_rst_doc.delay(res.__doc__, event)
                 return None if event['message_type'] == "private" else {'reply': "帮助已发送至私聊"}
-            if c == 'Echo' and event['user_id'] == 2300936257:
+            if c == 'Echo' and event['user_id'] in admin:
                 return {'reply': comm[4:].strip(), 'at_sender': False, 'auto_escape': True}
-            if c == 'Eval' and event['user_id'] == 2300936257:
+            if c == 'Eval' and event['user_id'] in admin:
                 res = eval(comm[4:].strip(), globals(), numpy.__dict__)
                 return {'reply': str(res), 'at_sender': False, 'auto_escape': True}
             if c == 'Calc':
                 tasks.calc_sympy.delay(comm, event)
                 return
             if c == 'Ord':
+                return {"reply": "目前暂停了这项功能"}
+
                 reply = requests.get("http://192.168.56.101:5679/ord", params={"cmd": comm[3:].strip()})
                 reply_text = reply.text.strip()
                 if len(reply_text) > 100 and event['message_type'] != 'private':
@@ -110,12 +115,7 @@ def handle_msg(event):
             return {'reply': f'报错了qaq: {str(type(e))}\n{clamp(str(e))}', 'auto_escape': True}
     if event['message_type'] == "group":
         if any(i in event['message'].lower() for i in blacklist):
-            try:
-                bot.delete_msg(message_id=event["message_id"])
-                bot.set_group_ban(group_id=event['group_id'], user_id=event['user_id'], duration=random.randint(1,10))
-            except CQHttp.Error:
-                return {"reply": "你要以身作则诶quq"}
-            return {"reply": "quq", "at_sender": False}
+            return {"reply": "这么说是不对的", "at_sender": False}
         try:
             # miscellanous, lowest priority
             if (event['message'][-3:].lower() == 'dai' \
@@ -168,9 +168,7 @@ def handle_msg(event):
                 return {'reply': "最喜欢qlbf了（", "at_sender": False, 'auto_escape': True}
         except Exception as e:
             return {'reply': f'报错了qaq: {str(type(e))}\n{clamp(str(e))}', 'auto_escape': True}
-    elif event['message_type'] == "private":
-        bot.send_private_msg(message=help_string, user_id=event['user_id'], auto_escape=True)
-        return
+
 
 
 @bot.on_notice('group_increase')
@@ -184,19 +182,20 @@ def handle_group_increase(event):
 @bot.on_notice('group_decrease')
 def handle_group_decrease(event):
     if event['group_id'] == 80852074 and event['sub_type'] == "leave":
-        tasks.calm_down.delay()
-        bot.send(message = " --- EMERGENCY SHUTDOWN --- ", event=event)
+        bot.set_group_whole_ban(group_id=80852074)
+        bot.send(message = " --- EMERGENCY LOCKDOWN --- ", event=event)
         bot.send(message = f"> Deathrattle of user {event['user_id']} <", event=event)
 
 @bot.on_request('friend')
 def handle_friend_request(event):
-    bot.send_private_msg(user_id=2300936257, message=str(event), auto_escape=True)
+    bot.send_private_msg(user_id=owner, message=str(event), auto_escape=True)
     return {'approve': True}
 
 @bot.on_request('group')
 def handle_group_request(event):
-    bot.send_private_msg(user_id=2300936257, message=str(event), auto_escape=True)
+    bot.send_private_msg(user_id=owner, message=str(event), auto_escape=True)
     if event['sub_type'] == "invite":
+        tasks.reject_unfamiliar_group.delay(event['group_id'])
         return {"approve": "True"}
 
 if __name__ == "__main__":

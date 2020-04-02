@@ -1,9 +1,116 @@
 import os, time, requests, re, redis
+import sympy
 from sympy.parsing.sympy_parser import parse_expr
 from celery_config import app
 from celery.exceptions import SoftTimeLimitExceeded
 
 pattern = re.compile(r"(.+)\n    =+")
+whitelist = ['abs',
+ 'all',
+ 'any',
+ 'ascii',
+ 'bin',
+ 'divmod',
+ 'hex',
+ 'iter',
+ 'max',
+ 'min',
+ 'next',
+ 'oct',
+ 'pow',
+ 'round',
+ 'sorted',
+ 'None',
+ 'True',
+ 'bool',
+ 'complex',
+ 'dict',
+ 'enumerate',
+ 'filter',
+ 'float',
+ 'frozenset',
+ 'int',
+ 'list',
+ 'map',
+ 'range',
+ 'reversed',
+ 'set',
+ 'slice',
+ 'tuple',
+ 'type',
+ 'zip']
+blacklist = ['__version__',
+ '__sympy_debug',
+ 'SYMPY_DEBUG',
+ 'external',
+ 'cache',
+ 'cacheit',
+ 'Lambda',
+ 'codegen',
+ 'printing',
+ 'Id',
+ 'plot',
+ 'textplot',
+ 'plot_backends',
+ 'plot_implicit',
+ 'plot_parametric',
+ 'pager_print',
+ 'pretty',
+ 'pretty_print',
+ 'pprint',
+ 'pprint_use_unicode',
+ 'pprint_try_use_unicode',
+ 'print_latex',
+ 'print_mathml',
+ 'print_python',
+ 'print_code',
+ 'print_glsl',
+ 'print_fcode',
+ 'print_rcode',
+ 'print_jscode',
+ 'print_gtk',
+ 'preview',
+ 'print_tree',
+ 'StrPrinter',
+ 'dotprint',
+ 'print_maple_code',
+ 'interactive',
+ 'init_session',
+ 'init_printing',
+ 'deprecated',
+ 'class_registry',
+ 'C',
+ 'ClassRegistry']
+
+calc_dict = {d:sympy.__dict__[d] for d in sympy.__dict__ 
+  if (d not in __builtins__ or d in whitelist) or d not in blacklist}
+
+def foolsopen(*args, **kwargs):
+    class foolFile:
+        def read(self, *args):
+            return "坏耶"
+        def write(self, *args):
+            return -114514
+        def readline(self, *args):
+            return "坏耶"
+        def readlines(self, *args):
+            return ["坏", "耶"]
+        def writeline(self, *args):
+            return -114514
+        def writelines(self, *args):
+            return -114514
+        def closed(self):
+            return True
+        def close(self):
+            return "好耶"
+    return foolFile()
+
+fools_dict = {
+    "eval" : lambda _: "坏耶",
+    "compile" : lambda _: "坏耶",
+    "open" : foolsopen,
+}
+
 class LittleBot:
     """A small version of the bot that only sends to the http api. This avoids the flask server setup and so can be jsonified."""
     def __init__(self, api_root):
@@ -69,7 +176,7 @@ def latexify(source, filename, size=512, verbose=False, **preamble):
 def get_preamble(usepackage=None, definitions=""):
     if usepackage is None:
         usepackage = ()
-    definitions += "\n\\newcommand{\\R}{\\mathbb R}\n\\newcommand{\\Q}{\\mathbb Q}\n\\newcommand{\\Z}{\\mathbb Z}\n\\newcommand{\\N}{\\mathbb N}\n\\newcommand{\\e}{\\mathrm e}\n\\newcommand{\\d}{\\mathrm d}"
+    definitions += "\n\\newcommand{\\R}{\\mathbb R}\n\\newcommand{\\Q}{\\mathbb Q}\n\\newcommand{\\Z}{\\mathbb Z}\n\\newcommand{\\N}{\\mathbb N}\n\\newcommand{\\e}{\\mathrm e}\n"
     usepackage += ("amssymb", "amsmath", "amsfonts")
     return r"\documentclass[varwidth,border=2pt]{standalone}" + \
       "\n\\usepackage{" + ", ".join(usepackage) + "}\n\\usepackage{xeCJK}\n" + definitions + "\n\\begin{document}\n"
@@ -85,7 +192,7 @@ def render_latex_and_send(res, event, latex_packages, resend=False, definitions=
                 bot.send_private_msg(user_id=event['user_id'], message=event['message'])
         except Exception:
             pass
-        bot.send(event=event, message=f"[CQ:image,file=file:///G:\\{filename}.jpeg]", auto_escape=False, at_sender=True)
+        bot.send(event=event, message=f"[CQ:at,qq={event['user_id']}]\n[CQ:image,file=file:///G:\\{filename}.jpeg]", auto_escape=False, at_sender=True)
         return ("Success", (r, os.system("rm ./img/*.jpeg")))
     except RuntimeError as e:
         bot.send_private_msg(user_id=event['user_id'], message=event['message'])
@@ -98,7 +205,7 @@ def render_latex_and_send(res, event, latex_packages, resend=False, definitions=
         return ("Fail",)
     except SoftTimeLimitExceeded:
         os.system("rm *.tex *.aux *.log *.pdf *.jpeg")
-        bot.send(event, "TLE~qwq")
+        bot.send(event, f"[CQ:at,qq={event['user_id']}]\nTLE~qwq")
         timeout_record(event['user_id'])
         return ("Timeout", event['user_id'])
 
@@ -122,12 +229,6 @@ def reject_unfamiliar_group(group_id):
         bot.send_group_msg(group_id=group_id, message="只有主人Trebor在的群我才能去qaq")
         bot.set_group_leave(group_id=group_id)
 
-@app.task
-def calm_down():
-    bot.set_group_whole_ban(group_id=80852074)
-    time.sleep(30)
-    bot.set_group_whole_ban(group_id=80852074, enable=False)
-
 @app.task(soft_time_limit=15, time_limit=20)
 def calc_sympy(comm, event):
     try:
@@ -136,14 +237,20 @@ def calc_sympy(comm, event):
         if not all([c <= '\xFF' for c in comm]):
             bot.send(event, message="只准用ascii字符，够用的quq")
             return
-        res = parse_expr(comm[4:].strip())
-        return bot.send(event, clamp(str(res), l=20000 if event['message_type'] == 'private' else 200), auto_escape=True)
+        if '"' in comm or "'" in comm:
+            bot.send(event, message=comm)
+            timeout_record(event['user_id'])
+            return
+        res = parse_expr(comm[4:].strip(), global_dict=calc_dict, local_dict=fools_dict)
+        message = clamp(str(res), l=20000 if event['message_type'] == 'private' else 200)
+        message = message.replace("[", "&#91;").replace("]", "&#93;").replace("&", "&amp;")
+        return bot.send(event, f"[CQ:at,qq={event['user_id']}]\n" + message, auto_escape=False)
     except SoftTimeLimitExceeded:
-        bot.send(event, "TLE~qwq")
+        bot.send(event, f"[CQ:at,qq={event['user_id']}]\nTLE~qwq", auto_escape=False)
         timeout_record(event['user_id'])
         return ("Timeout", event['user_id'])
     except Exception as e:
-        return bot.send(event, f'报错了qaq: {str(type(e))}\n{clamp(str(e))}', auto_escape=True)
+        return bot.send(event, f'\n报错了qaq: {str(type(e))}\n{clamp(str(e))}', auto_escape=True)
 
 if __name__ == "__main__":
     print(latexify(r"你好！$\displaystyle \int_{-\infty}^\infty e^{-x^2} = \sqrt{\pi}.$Yes.", "test", verbose=False))
