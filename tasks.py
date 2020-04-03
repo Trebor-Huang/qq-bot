@@ -255,14 +255,16 @@ def calc_sympy(comm, event):
     except Exception as e:
         return bot.send(event, f'\n报错了qaq: {str(type(e))}\n{clamp(str(e))}', auto_escape=True)
 
-@app.task
-def run_bf(event, code, inp=""):
-    r, g = brainfuck.run(code, inp, 10000)
-    if g == 0:
-        bot.send(event, "TLE!", at_sender=True)
-    bot.send(event, "结果为:\n" + r, auto_escape=True, at_sender=True)
-    timeout_record(event['user_id'], 10000 - g)
-    return g, inp
+@app.task(soft_time_limit=15, time_limit=20)
+def run_bf(event, code, inp="", useascii=True):
+    try:
+        r= brainfuck.run(code, inp, useascii)
+        bot.send(event, "结果为:\n" + clamp(r), auto_escape=True, at_sender=True)
+    except SoftTimeLimitExceeded:
+        bot.send(event, f"[CQ:at,qq={event['user_id']}]\nTLE~qwq")
+        timeout_record(event['user_id'])
+        return ("Timeout", event['user_id'])
+    return inp
 
 if __name__ == "__main__":
     print(latexify(r"你好！$\displaystyle \int_{-\infty}^\infty e^{-x^2} = \sqrt{\pi}.$Yes.", "test", verbose=False))

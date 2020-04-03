@@ -1,20 +1,22 @@
-def process_in(s):
-    if len(s) > 0 and s[0] == 'n':
-        sp = s[1:].split(',')
+def process_in(s, useascii):
+    if not useascii:
+        sp = s.split(',')
         return (int(i.strip()) for i in sp if str.isnumeric(i))
     else:
         return map(ord, s)
 
 
-def evaluate(code, stdin, gas):
+def evaluate(code, stdin, useascii):
     code = cleanup(list(code))
-    bracemap = buildbracemap(code)
+    try:
+        bracemap = buildbracemap(code)
+    except IndexError:
+        return "[Bracket unmatched.]"
     output = ""
 
     cells, codeptr, cellptr = [0], 0, 0
 
-    while gas > 0 and codeptr < len(code):
-        gas -= 1
+    while codeptr < len(code):
         command = code[codeptr]
 
         if command == ">":
@@ -36,7 +38,7 @@ def evaluate(code, stdin, gas):
         if command == "]" and cells[cellptr] != 0:
             codeptr = bracemap[codeptr]
         if command == ".":
-            output += chr(cells[cellptr])
+            output += chr(cells[cellptr]) if useascii else (str(cells[cellptr]) + ", ")
         if command == ",":
             try:
                 cells[cellptr] = next(stdin) % 256
@@ -44,7 +46,7 @@ def evaluate(code, stdin, gas):
                 cells[cellptr] = 0
 
         codeptr += 1
-    return output, gas
+    return output
 
 
 def cleanup(code):
@@ -64,8 +66,8 @@ def buildbracemap(code):
     return bracemap
 
 
-def run(code, inp, gas):
-    return evaluate(code, process_in(inp), gas)
+def run(code, inp, useascii=True):
+    return evaluate(code, process_in(inp, useascii), useascii)
 
 
 if __name__ == "__main__":
@@ -103,4 +105,4 @@ if __name__ == "__main__":
         31 +++.----- -.----- ---.  Cell #3 for 'rl' and 'd'
         32 >>+.                    Add 1 to Cell #5 gives us an exclamation point
         33 >++.                    And finally a newline from Cell #6"""
-    print(run(program, '', 99999))
+    print(run(program, ''))

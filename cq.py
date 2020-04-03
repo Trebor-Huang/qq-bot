@@ -106,7 +106,11 @@ def handle_msg(event):
                 return
             if c == 'Brainfk':
                 res = comm[8:].split("| input |")
-                tasks.run_bf.delay(event, *res)
+                tasks.run_bf.delay(event, *res, useascii=True)
+                return
+            if c == 'Brainfk-n':
+                res = comm[10:].split("| input |")
+                tasks.run_bf.delay(event, *res, useascii=False)
                 return
             if ('电' in comm or '⚡' in comm) and event['message_type'] == "group":
                 shock = int(r.incr("shock"))
