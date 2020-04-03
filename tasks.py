@@ -1,4 +1,4 @@
-import os, time, requests, re, redis
+import os, time, requests, re, redis, brainfuck
 import sympy
 from sympy.parsing.sympy_parser import parse_expr
 from celery_config import app
@@ -145,11 +145,11 @@ class LittleBot:
 
 bot = LittleBot('http://192.168.56.101:5700/')
 
-def timeout_record(user_id):
+def timeout_record(user_id, amount = 10000):
     r = redis.Redis(host='127.0.0.1', port=6379, db=0)
-    ex = int(r.incr("timeout" + str(user_id)))
-    if ex < 3:
-        r.expire("timeout" + str(user_id), 3600 * 3 ** ex)
+    ex = int(r.incr("timeout" + str(user_id), amount))
+    if ex < 30000:
+        r.expire("timeout" + str(user_id), int(3600 * 3 ** (ex/10000)))
     r.close()
 
 def clamp(s, l=200):
@@ -195,13 +195,16 @@ def render_latex_and_send(res, event, latex_packages, resend=False, definitions=
         bot.send(event=event, message=f"[CQ:at,qq={event['user_id']}]\n[CQ:image,file=file:///G:\\{filename}.jpeg]", auto_escape=False, at_sender=True)
         return ("Success", (r, os.system("rm ./img/*.jpeg")))
     except RuntimeError as e:
-        bot.send_private_msg(user_id=event['user_id'], message=event['message'])
-        bot.send_private_msg(user_id=event['user_id'], message = "错误如下：\n" + str(e).strip(), auto_escape=True)
+        bot.send(event=event, message="LaTeX有误", at_sender=True)
+        try:
+            bot.send_private_msg(user_id=event['user_id'], message=event['message'])
+            bot.send_private_msg(user_id=event['user_id'], message = "错误如下：\n" + str(e).strip(), auto_escape=True)
+        except Exception:
+            bot.send(event, message="似乎你不允许陌生人私聊，这样我发送不了错误诶", at_sender=True)
         try:
             bot.delete_msg(message_id=event['message_id'])
         except Exception:
             pass
-        bot.send(event=event, message="LaTeX有误", at_sender=True)
         return ("Fail",)
     except SoftTimeLimitExceeded:
         os.system("rm *.tex *.aux *.log *.pdf *.jpeg")
@@ -251,6 +254,15 @@ def calc_sympy(comm, event):
         return ("Timeout", event['user_id'])
     except Exception as e:
         return bot.send(event, f'\n报错了qaq: {str(type(e))}\n{clamp(str(e))}', auto_escape=True)
+
+@app.task
+def run_bf(event, code, inp=""):
+    r, g = brainfuck.run(code, inp, 10000)
+    if g == 0:
+        bot.send(event, "TLE!", at_sender=True)
+    bot.send(event, "结果为:\n" + r, auto_escape=True, at_sender=True)
+    timeout_record(event['user_id'], 10000 - g)
+    return g, inp
 
 if __name__ == "__main__":
     print(latexify(r"你好！$\displaystyle \int_{-\infty}^\infty e^{-x^2} = \sqrt{\pi}.$Yes.", "test", verbose=False))

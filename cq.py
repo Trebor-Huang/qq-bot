@@ -20,12 +20,12 @@ owner = 2300936257
 
 latex_packages = ("bm", "array", "amsfonts", "amsmath", "amssymb", "mathtools", "tikz-cd", "mathrsfs", "xcolor", "mathdots", "eufrak", "ebproof", "tikz-feynman")
 help_string = "所有命令以'> '开头，且均支持群聊和私聊使用。命令列表：\n" +\
-    "   > calc EXPRESSION 符号计算ascii数学表达式，允许使用字母变量。相乘必须用*不能连起来；幂函数必须用**不能用^。单字母常量首字母大写：E, pi, I。oo是无穷大∞。积分 integrate(表达式, (变量, 下界, 上界)) 或者 integrate(表达式, 变量)；微分 diff(表达式, 变量, 变量, 变量, ...)，如diff(sin(x), x, x, x)表示对sin(x)求x的三阶导；求和 Sum(表达式, (变量, 下界, 上界)).doit()，不加doit()不会计算。更多功能参见sympy.org。注意这些计算都是符号计算，数值计算可以用.n()或者数值计算方法，如nsolve等。\n" +\
-    "   > render LATEX 渲染LaTeX文字并以图片形式发送。这个功能是为方便文字公式相间，如果只希望渲染数学公式请用latex命令。\n"+\
-    "   > latex LATEX_FORMULA 渲染单个数学公式。\n"+\
+    "   > calc $EXPRESSION 符号计算ascii数学表达式，允许使用字母变量。相乘必须用*不能连起来；幂函数必须用**不能用^。单字母常量首字母大写：E, pi, I。oo是无穷大∞。积分 integrate(表达式, (变量, 下界, 上界)) 或者 integrate(表达式, 变量)；微分 diff(表达式, 变量, 变量, 变量, ...)，如diff(sin(x), x, x, x)表示对sin(x)求x的三阶导；求和 Sum(表达式, (变量, 下界, 上界)).doit()，不加doit()不会计算。更多功能参见sympy.org。注意这些计算都是符号计算，数值计算可以用.n()或者数值计算方法，如nsolve等。\n" +\
+    "   > render $LATEX 渲染LaTeX文字并以图片形式发送。这个功能是为方便文字公式相间，如果只希望渲染数学公式请用latex命令。\n"+\
+    "   > latex $LATEX_FORMULA 渲染单个数学公式。\n"+\
     "   > render-r/latex-r 同上，会将群聊中撤回的LaTeX私聊发回\n"+\
-    "   > ord EXPRESSION  序数运算。\n"+\
-    "   > help [EXPRESSION] 不加参数：展示这个帮助；添加一个数学表达式作为参数：展示这个表达式的帮助文档（如果有）。\n"+\
+    "   > brainfk $PROGRAM | input | $INPUT  Brainfuck程序。\n"+\
+    "   > help [$EXPRESSION] 不加参数：展示这个帮助；添加一个数学表达式作为参数：展示这个表达式的帮助文档（如果有）。\n"+\
     "   > 电 随机禁言\\(≧▽≦)/ 命令中含有的“电”字越多期望时间越长哦～ 一个⚡算五个“电”w\n\n"+\
     "附加功能：\n   - 复读\n    - 不友善禁言"
 
@@ -36,7 +36,7 @@ def clamp(s, l=200):
 
 def evaluate_user(user_id):
     timeouts = r.get("timeout" + str(user_id))
-    return timeouts is None or (int(timeouts) < 3)
+    return timeouts is None or (int(timeouts) < 30000)
 
 @bot.on_message
 def handle_msg(event):
@@ -51,13 +51,16 @@ def handle_msg(event):
             comms = comm.split()
             c = comms[0].capitalize()
             if c == 'Forgive' and event['user_id'] in admin:
-                comms[1] = ''.join(list(filter(str.isnumeric, comms[1])))
+                comms[1] = ''.join(filter(str.isnumeric, comms[1]))
                 r.set("timeout" + comms[1], 0)
                 return {'reply': "原谅你啦 [CQ:at,qq=%s]" % comms[1], "at_sender": False, "auto_escape":False}
             if c == 'Help':
                 cms = comm[4:].strip()
                 if cms == '':
-                    bot.send_private_msg(message=help_string, user_id=event['user_id'], auto_escape=True)
+                    try:
+                        bot.send_private_msg(message=help_string, user_id=event['user_id'], auto_escape=True)
+                    except Exception:
+                        bot.send(event, message="似乎你不允许陌生人私聊，这样我发送不了错误诶", at_sender=True)
                     return None if event['message_type'] == "private" else {'reply': "帮助已发送至私聊"}
                 if any(['\u4e00' <= c <= '\u9fff' for c in comm]):
                     return {'reply': "不支持汉字变量的计算。"}
@@ -66,7 +69,10 @@ def handle_msg(event):
                     return {'reply': "这东西是个符号"}
                 if not res.__doc__:
                     return {'reply': "这个东西没有帮助文档诶"}
-                bot.send_private_msg(message=f"这个对象：\n\n{str(res)}\n类型是{type(res)}\n\n的帮助文档如下，请稍等：", user_id=event['user_id'], auto_escape=True)
+                try:
+                    bot.send_private_msg(message=f"这个对象：\n\n{str(res)}\n类型是{type(res)}\n\n的帮助文档如下，请稍等：", user_id=event['user_id'], auto_escape=True)
+                except Exception:
+                    bot.send(event, message="似乎你不允许陌生人私聊，这样我发送不了错误诶", at_sender=True)
                 tasks.send_rst_doc.delay(res.__doc__, event)
                 return None if event['message_type'] == "private" else {'reply': "帮助已发送至私聊"}
             if c == 'Echo' and event['user_id'] in admin:
@@ -97,6 +103,10 @@ def handle_msg(event):
                 return
             if c == 'Latex-r':
                 tasks.render_latex_and_send.delay(f"$\\displaystyle {comm[7:].strip()}$", event, latex_packages, True)
+                return
+            if c == 'Brainfk':
+                res = comm[8:].split("| input |")
+                tasks.run_bf.delay(event, *res)
                 return
             if ('电' in comm or '⚡' in comm) and event['message_type'] == "group":
                 shock = int(r.incr("shock"))
