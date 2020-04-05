@@ -89,13 +89,6 @@ def handle_msg(event):
                 return
             if c == 'Ord':
                 return {"reply": "目前暂停了这项功能"}
-
-                reply = requests.get("http://192.168.56.101:5679/ord", params={"cmd": comm[3:].strip()})
-                reply_text = reply.text.strip()
-                if len(reply_text) > 100 and event['message_type'] != 'private':
-                    bot.send_private_msg(message=reply_text, auto_escape=True, user_id=event['user_id'])
-                    return {"reply": "有点太长了，已发私聊"}
-                return {"reply": reply.text.strip(), "auto_escape": True}
             if c == 'Render':
                 tasks.render_latex_and_send.delay(comm[6:].strip(), event, latex_packages)
                 return
