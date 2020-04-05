@@ -9,6 +9,7 @@ The bot supports:
  - Ordinal computation
  - LaTeX rendering
  - Random banning (bans the user on his/her own request)
+ - Brainf**k interpreter
  - Miscellaneous memes in rhythm game culture
 
 ## Dependencies
@@ -55,5 +56,5 @@ Anyone can request features in the issues!
 
 ## Acknowledgements
 
-Many thanks to [@ice-1000](https://github.com/ice1000) who generously paid for the Pro functionalities of CoolQ.
+Due to a series of sad events that slowly sinked in, the acknowledgement is regretfully removed.
 

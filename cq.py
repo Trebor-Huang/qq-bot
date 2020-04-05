@@ -24,10 +24,12 @@ help_string = "所有命令以'> '开头，且均支持群聊和私聊使用。�
     "   > render $LATEX 渲染LaTeX文字并以图片形式发送。这个功能是为方便文字公式相间，如果只希望渲染数学公式请用latex命令。\n"+\
     "   > latex $LATEX_FORMULA 渲染单个数学公式。\n"+\
     "   > render-r/latex-r 同上，会将群聊中撤回的LaTeX私聊发回\n"+\
-    "   > brainfk $PROGRAM | input | $INPUT  Brainfuck程序。\n"+\
+    "   > brainfk Brainfuck程序，用法见后。\n"+\
+    "   > utlc 无类型lambda演算，用法见后。\n"+\
     "   > help [$EXPRESSION] 不加参数：展示这个帮助；添加一个数学表达式作为参数：展示这个表达式的帮助文档（如果有）。\n"+\
     "   > 电 随机禁言\\(≧▽≦)/ 命令中含有的“电”字越多期望时间越长哦～ 一个⚡算五个“电”w\n\n"+\
-    "附加功能：\n   - 复读\n    - 不友善禁言"
+    "附加功能：\n   - 复读\n    - 不友善禁言\n\n" +\
+    "Brainfk程序用法：\n    在'> brainfk '后面直接写下程序，除了+-<>[],.之外的字符会被忽略；用'| input |'之后跟ascii输入。"
 
 def clamp(s, l=200):
     if len(s) > l:
@@ -60,7 +62,8 @@ def handle_msg(event):
                     try:
                         bot.send_private_msg(message=help_string, user_id=event['user_id'], auto_escape=True)
                     except Exception:
-                        bot.send(event, message="似乎你不允许陌生人私聊，这样我发送不了错误诶", at_sender=True)
+                        bot.send(event, message="似乎你（或者群主设置）不允许群内陌生人私聊", at_sender=True)
+                        return
                     return None if event['message_type'] == "private" else {'reply': "帮助已发送至私聊"}
                 if any(['\u4e00' <= c <= '\u9fff' for c in comm]):
                     return {'reply': "不支持汉字变量的计算。"}
@@ -72,7 +75,8 @@ def handle_msg(event):
                 try:
                     bot.send_private_msg(message=f"这个对象：\n\n{str(res)}\n类型是{type(res)}\n\n的帮助文档如下，请稍等：", user_id=event['user_id'], auto_escape=True)
                 except Exception:
-                    bot.send(event, message="似乎你不允许陌生人私聊，这样我发送不了错误诶", at_sender=True)
+                    bot.send(event, message="似乎你（或者群主设置）不允许群内陌生人私聊", at_sender=True)
+                    return
                 tasks.send_rst_doc.delay(res.__doc__, event)
                 return None if event['message_type'] == "private" else {'reply': "帮助已发送至私聊"}
             if c == 'Echo' and event['user_id'] in admin:
@@ -159,7 +163,7 @@ def handle_msg(event):
                         if rcount >= 7:
                             r.set("count" + str(event['group_id']), 0)
                             return {'reply': "适度复读活跃气氛，过度复读影响交流。为了您和他人的健康，请勿过量复读。", 'at_sender': False, 'auto_escape': True}
-                        if random.randint(1, rcount+1) >= 3:
+                        if random.randint(1, rcount+1) >= 3 and random.randint(1, rcount+1) >= 3:
                             r.set("count" + str(event['group_id']), 0) # prevent spamming
                             if random.randint(1, 30) == 4:
                                 return {'reply': "复  读  大  失  败", 'at_sender': False, 'auto_escape': True}
@@ -178,8 +182,6 @@ def handle_msg(event):
                 return {'reply': "3倍ice cream☆☆！！！", 'at_sender': False, 'auto_escape': True}
             if random.randint(1, 360) == 144 and event['group_id'] == 730695976:
                 return {'reply': "爬", 'at_sender': False, 'auto_escape': True}
-            if random.randint(1, 1000) == 111 and event['group_id'] == 80852074:
-                return {'reply': "最喜欢qlbf了（", "at_sender": False, 'auto_escape': True}
         except Exception as e:
             return {'reply': f'报错了qaq: {str(type(e))}\n{clamp(str(e))}', 'auto_escape': True}
 

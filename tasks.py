@@ -200,7 +200,8 @@ def render_latex_and_send(res, event, latex_packages, resend=False, definitions=
             bot.send_private_msg(user_id=event['user_id'], message=event['message'])
             bot.send_private_msg(user_id=event['user_id'], message = "错误如下：\n" + str(e).strip(), auto_escape=True)
         except Exception:
-            bot.send(event, message="似乎你不允许陌生人私聊，这样我发送不了错误诶", at_sender=True)
+            bot.send(event, message="似乎你（或者群主设置）不允许群内陌生人私聊", at_sender=True)
+            return
         try:
             bot.delete_msg(message_id=event['message_id'])
         except Exception:
@@ -241,7 +242,7 @@ def calc_sympy(comm, event):
             bot.send(event, message="只准用ascii字符，够用的quq")
             return
         if '"' in comm or "'" in comm:
-            bot.send(event, message=comm)
+            bot.send(event, message=comm, auto_escape=False)
             timeout_record(event['user_id'])
             return
         res = parse_expr(comm[4:].strip(), global_dict=calc_dict, local_dict=fools_dict)
