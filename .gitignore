@@ -2,3 +2,9 @@ img/
 dump.rdb
 .DS_Store
 __pycache__/
+*.aux
+*.jpeg
+*.pdf
+*.log
+*.tex
+latex_output/latex/

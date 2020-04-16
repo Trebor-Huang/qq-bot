@@ -18,18 +18,41 @@ r = redis.Redis(host='127.0.0.1', port=6379, db=0)
 admin = [2300936257, 1458814497]
 owner = 2300936257
 
-latex_packages = ("bm", "array", "amsfonts", "amsmath", "amssymb", "mathtools", "tikz-cd", "mathrsfs", "xcolor", "mathdots", "eufrak", "ebproof", "tikz-feynman")
-help_string = "所有命令以'> '开头，且均支持群聊和私聊使用。命令列表：\n" +\
-    "   > calc $EXPRESSION 符号计算ascii数学表达式，允许使用字母变量。相乘必须用*不能连起来；幂函数必须用**不能用^。单字母常量首字母大写：E, pi, I。oo是无穷大∞。积分 integrate(表达式, (变量, 下界, 上界)) 或者 integrate(表达式, 变量)；微分 diff(表达式, 变量, 变量, 变量, ...)，如diff(sin(x), x, x, x)表示对sin(x)求x的三阶导；求和 Sum(表达式, (变量, 下界, 上界)).doit()，不加doit()不会计算。更多功能参见sympy.org。注意这些计算都是符号计算，数值计算可以用.n()或者数值计算方法，如nsolve等。\n" +\
-    "   > render $LATEX 渲染LaTeX文字并以图片形式发送。这个功能是为方便文字公式相间，如果只希望渲染数学公式请用latex命令。\n"+\
-    "   > latex $LATEX_FORMULA 渲染单个数学公式。\n"+\
-    "   > render-r/latex-r 同上，会将群聊中撤回的LaTeX私聊发回\n"+\
-    "   > brainfk Brainfuck程序，用法见后。\n"+\
-    "   > utlc 无类型lambda演算，用法见后。\n"+\
-    "   > help [$EXPRESSION] 不加参数：展示这个帮助；添加一个数学表达式作为参数：展示这个表达式的帮助文档（如果有）。\n"+\
-    "   > 电 随机禁言\\(≧▽≦)/ 命令中含有的“电”字越多期望时间越长哦～ 一个⚡算五个“电”w\n\n"+\
-    "附加功能：\n   - 复读\n    - 不友善禁言\n\n" +\
-    "Brainfk程序用法：\n    在'> brainfk '后面直接写下程序，除了+-<>[],.之外的字符会被忽略；用'| input |'之后跟ascii输入。"
+latex_packages = ("bm", "array", "amsfonts", "amsmath", "amssymb", "mathtools", "tikz-cd", "mathrsfs", "xcolor", "mathdots", "eufrak", "ebproof", "verbatim")
+help_string = """
+所有命令以西文大于号">"和一个空格开头，基本上支持群聊和私聊使用。
+
+"> calc " + 表达式
+\t符号计算ascii数学表达式，允许使用字母变量。
+\t注意，相乘必须用"*"号连接；幂要用"**"而不能用"^"；
+\t常量的书写格式：E, I, pi；oo代表无限大；
+\t积分 integrate(表达式, (变量, 下界, 上界)) 或者 integrate(表达式, 变量)；
+\t微分 diff(表达式, 变量, 变量, 变量, ...)，如diff(sin(x), x, x, x)表示对sin(x)求x的三阶导；
+\t求和 Sum(表达式, (变量, 下界, 上界)).doit()，不加doit()不会计算。
+\t注意这些计算都是符号计算，数值计算可以用.n()或者数值计算方法，如nsolve等。
+\t更多功能参见sympy.org。
+
+"> render" + LaTeX文字
+\t渲染LaTeX段落。如果希望渲染公式请用 $ ... $ 或者 \\( ... \\) 括起来；不支持行间公式（即 $$ ... $$ 或者 \\[ ... \\] 括起的公式），可以用 $ \\displaystyle ... $ 代替。
+\t如果希望添加LaTeX宏包，可以在最开头用"\\begin{bot-usepackage} 包1 包2 ... \\end{bot-usepackage}"声明希望用到的宏包，如果没有安装，可以联系bot作者。
+\t如果希望添加LaTeX preamble里的内容，可以紧接着用""\\begin{bot-defs} ... \\end{bot-defs}"添加。
+
+"> render-r" + LaTeX文字
+\t与上一个命令相同，会私聊回发你的LaTeX代码。
+
+"> latex" + LaTeX公式
+\t正在开发，请稍等。
+
+"> brainfk" + Brainfuck程序 [ + "| input |" + ascii输入 ]
+\tBrainfuck程序，输入和输出都是ascii，纸带向右无限延伸，每个格子范围是0~255（取模）。
+
+"> help" [ + calc命令可用的函数 ]
+\t不加参数：显示这个帮助信息；添加参数：显示sympy函数的帮助文档（如果有）。
+
+附加功能：
+ - 复读
+
+""".strip()
 
 def clamp(s, l=200):
     if len(s) > l:
@@ -90,16 +113,10 @@ def handle_msg(event):
             if c == 'Ord':
                 return {"reply": "目前暂停了这项功能"}
             if c == 'Render':
-                tasks.render_latex_and_send.delay(comm[6:].strip(), event, latex_packages)
-                return
-            if c == 'Latex':
-                tasks.render_latex_and_send.delay(f"$\\displaystyle {comm[5:].strip()}$", event, latex_packages, definitions="")
+                tasks.docker_latex.delay(comm[6:].strip(), False, event)
                 return
             if c == 'Render-r':
-                tasks.render_latex_and_send.delay(comm[8:].strip(), event, latex_packages, True)
-                return
-            if c == 'Latex-r':
-                tasks.render_latex_and_send.delay(f"$\\displaystyle {comm[7:].strip()}$", event, latex_packages, True)
+                tasks.docker_latex.delay(comm[8:].strip(), True, event)
                 return
             if c == 'Brainfk':
                 res = comm[8:].split("| input |")
@@ -198,14 +215,11 @@ def handle_group_decrease(event):
 @bot.on_request('friend')
 def handle_friend_request(event):
     bot.send_private_msg(user_id=owner, message=str(event), auto_escape=True)
-    return {'approve': True}
 
 @bot.on_request('group')
 def handle_group_request(event):
-    bot.send_private_msg(user_id=owner, message=str(event), auto_escape=True)
     if event['sub_type'] == "invite":
-        tasks.reject_unfamiliar_group.delay(event['group_id'])
-        return {"approve": "True"}
+        bot.send_private_msg(user_id=owner, message=str(event), auto_escape=True)
 
 if __name__ == "__main__":
     bot.run(host='127.0.0.1', port=8099, debug=True)
