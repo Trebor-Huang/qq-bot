@@ -7,4 +7,5 @@ __pycache__/
 *.pdf
 *.log
 *.tex
-latex_output/latex/
+latex_output/
+coolq/*

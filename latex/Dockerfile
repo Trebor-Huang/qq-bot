@@ -50,6 +50,6 @@ RUN apt-get install -y \
   apt-get clean -y
 
 WORKDIR /home/latex
-ENTRYPOINT ulimit -t 30 && xelatex -interaction nonstopmode -halt-on-error texput.tex
+ENTRYPOINT ulimit -t 60 && xelatex -interaction nonstopmode -halt-on-error texput.tex
 # docker run -m 1GB -v /Users/trebor/Desktop/coolq/latex/texput.tex:/home/latex/texput.tex --name latex_container treborhuang/latex --rm
 # docker cp latex_container:/home/latex/ ./

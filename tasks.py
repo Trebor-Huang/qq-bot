@@ -5,6 +5,7 @@ from celery_config import app
 from celery.exceptions import SoftTimeLimitExceeded
 import latexify_docker
 import fcntl
+import custom_settings
 
 pattern = re.compile(r"(.+)\n    =+")
 whitelist = ['abs',
@@ -145,7 +146,7 @@ class LittleBot:
             raise RuntimeError(resp.status_code)
         return do_call
 
-bot = LittleBot('http://192.168.56.101:5700/')
+bot = LittleBot(custom_settings.CQHTTP_API)
 
 def timeout_record(user_id, amount = 10000):
     r = redis.Redis(host='127.0.0.1', port=6379, db=0)

@@ -1,17 +1,20 @@
 import os
 from celery.exceptions import SoftTimeLimitExceeded
+import custom_settings
 
 def compile_latex(src):
-    os.system("rm ./latex_output/*")
+    os.system("rm -dfR ./latex_output")
+    os.system(f"rm {custom_settings.CQ_IMG_DIR}final.jpeg")
     os.system("ulimit -t 30")
     with open("latex/texput.tex", "w") as f:
         f.write(src)
     os.system("docker container rm latex_container 2> /dev/null")
     try:
-        compile_return = os.system("docker run -m 1GB -v /Users/trebor/Desktop/coolq/latex/texput.tex:/home/latex/texput.tex --name latex_container treborhuang/latex --rm")
+        compile_return = os.system("docker run -m 1GB -v /Users/trebor/Desktop/coolq/latex/texput.tex:/home/latex/texput.tex --name latex_container treborhuang/latex > /dev/null")
     except SoftTimeLimitExceeded:
         return ("Timeout", (), "")
     copy_return = os.system("docker cp latex_container:/home/latex/ ./latex_output/")
+    os.system("docker container rm latex_container > /dev/null")
     # The results will be in ./latex_output/latex/texput.*
     if compile_return != 0:
         with open(f"./latex_output/latex/texput.log", "r") as f:
@@ -20,9 +23,9 @@ def compile_latex(src):
         if error_log:
             return ("Failed", (compile_return, copy_return), error_log.strip())
         return ("Failed-NoError", (compile_return, copy_return), logs)
-    convert_return = os.system("convert -density 500 ./latex_output/latex/texput.pdf ./latex_output/latex/texput.jpeg")
-    resize_return = os.system("convert ./latex_output/latex/texput.jpeg -resample 300 ./img/final.jpeg")
-    return ("Done", (compile_return, copy_return, convert_return, resize_return), "[CQ:image,file=file:///G:\\final.jpeg]")
+    convert_return = os.system("convert -density 500 ./latex_output/texput.pdf ./latex_output/texput.jpeg")
+    resize_return = os.system(f"convert ./latex_output/texput.jpeg -resample 300 {custom_settings.CQ_IMG_DIR}final.jpeg")
+    return ("Done", (compile_return, copy_return, convert_return, resize_return), f"[CQ:image,file=final.jpeg]")
 
 def get_preamble(usepackage=(), definitions=""):
     definitions += "\n\\newcommand{\\R}{\\mathbb R}\n\\newcommand{\\Q}{\\mathbb Q}\n\\newcommand{\\Z}{\\mathbb Z}\n\\newcommand{\\N}{\\mathbb N}\n\\newcommand{\\e}{\\mathrm e}\n"

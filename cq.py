@@ -9,10 +9,11 @@ from celery import Celery
 from cqhttp import CQHttp
 import redis
 import tasks
+import custom_settings
 
 blacklist = ["智障", "傻逼", "傻b", "你国", "贵国", "死妈", "死🐴", "老子", "贵群", "弱智", "政治", "脑残", "尼玛"]
 
-bot = CQHttp(api_root='http://192.168.56.101:5700/')
+bot = CQHttp(api_root=custom_settings.CQHTTP_API)
 application = bot.wsgi
 r = redis.Redis(host='127.0.0.1', port=6379, db=0)
 admin = [2300936257, 1458814497]
@@ -65,8 +66,6 @@ def evaluate_user(user_id):
 
 @bot.on_message
 def handle_msg(event):
-    if random.randint(1,30) == 1:
-        bot.clean_data_dir(data_dir="image")
     if event['message'][0:2] == '> ' and event['message'] != "> ":
         if not evaluate_user(event['user_id']):
             return {'reply': "不喜欢你qwq（给我发女装照片好不好quq", 'at_user': True, 'auto_escape': True}
@@ -85,7 +84,7 @@ def handle_msg(event):
                     try:
                         bot.send_private_msg(message=help_string, user_id=event['user_id'], auto_escape=True)
                     except Exception:
-                        bot.send(event, message="似乎你（或者群主设置）不允许群内陌生人私聊", at_sender=True)
+                        bot.send(event, message=f"[CQ:at,qq={event['user_id']}]似乎你（或者群主设置）不允许群内陌生人私聊")
                         return
                     return None if event['message_type'] == "private" else {'reply': "帮助已发送至私聊"}
                 if any(['\u4e00' <= c <= '\u9fff' for c in comm]):
