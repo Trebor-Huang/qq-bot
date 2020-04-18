@@ -17,7 +17,7 @@ def compile_latex(src):
     os.system("docker container rm latex_container > /dev/null")
     # The results will be in ./latex_output/latex/texput.*
     if compile_return != 0:
-        with open(f"./latex_output/latex/texput.log", "r") as f:
+        with open(f"./latex_output/texput.log", "r") as f:
             logs = f.read()
         error_log = logs[logs.find("\n!"):logs.find("Here is how much of")]
         if error_log:
