@@ -1,11 +1,9 @@
-img/
-dump.rdb
+backend/__pycache__/
 .DS_Store
-__pycache__/
-*.aux
 *.jpeg
-*.pdf
-*.log
 *.tex
-latex_output/
-coolq/*
+*.aux
+*.pdf
+*.jar
+dump.rdb
+backend/latex_output
