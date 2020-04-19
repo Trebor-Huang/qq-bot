@@ -10,7 +10,7 @@ from cqhttp import CQHttp
 import redis
 import tasks
 import custom_settings
-
+# docker run --name=coolq -d -p 9000:9000 -p 5700:5700 -v $(pwd)/coolq:/home/user/coolq coolq/wine-coolq
 blacklist = ["智障", "傻逼", "傻b", "你国", "贵国", "死妈", "死🐴", "老子", "贵群", "弱智", "政治", "脑残", "尼玛"]
 
 bot = CQHttp(api_root=custom_settings.CQHTTP_API)
@@ -19,7 +19,6 @@ r = redis.Redis(host='127.0.0.1', port=6379, db=0)
 admin = [2300936257, 1458814497]
 owner = 2300936257
 
-latex_packages = ("bm", "array", "amsfonts", "amsmath", "amssymb", "mathtools", "tikz-cd", "mathrsfs", "xcolor", "mathdots", "eufrak", "ebproof", "verbatim")
 help_string = """
 所有命令以西文大于号">"和一个空格开头，基本上支持群聊和私聊使用。
 

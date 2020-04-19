@@ -171,28 +171,25 @@ def docker_latex(src, resend, event):
     if src[:16] == "\\begin{bot-defs}":
         src = src[16:]
         defs, src = src.split("\\end{bot-defs}")
-    with open(".lock", "w") as lf:
-        fcntl.lockf(lf, fcntl.LOCK_EX)
-        src_ltx = latexify_docker.get_source(src, pkgs, defs)
-        r, rets, l = latexify_docker.compile_latex(src_ltx)
-        print(r, rets)
-        try:
-            if resend or (r != "Done"):
-                bot.send_private_msg(user_id=event['user_id'], message=event['message'])
-            if r == "Timeout":
-                bot.send_private_msg(user_id=event['user_id'], message="TLE~qwq")
-                timeout_record(event['user_id'])
-            elif r == "Failed":
-                bot.send(event, message=f"[CQ:at,qq={event['user_id']}]\n" + "出错了qaq")
-                bot.send_private_msg(user_id=event['user_id'], message=l)
-            elif r == "Failed-NoError":
-                bot.send(event, message=f"[CQ:at,qq={event['user_id']}]\n" + "出错了qaq，而且不是一般的编译错误，log太长了我懒得发，跟我主人说吧qwq")
-            elif r == "Done":
-                bot.send(event, message=f"[CQ:at,qq={event['user_id']}]\n" + l)
-        except Exception:
-            bot.send(event, message="似乎你（或者群主设置）不允许群内陌生人私聊", at_sender=True)
-        finally:
-            fcntl.lockf(lf, fcntl.LOCK_UN)
+    src_ltx = latexify_docker.get_source(src, pkgs, defs)
+    r, rets, l = latexify_docker.compile_latex(src_ltx)
+    print(r, rets)
+    try:
+        if resend or (r != "Done"):
+            bot.send_private_msg(user_id=event['user_id'], message=event['message'])
+        if r == "Timeout":
+            bot.send_private_msg(user_id=event['user_id'], message="TLE~qwq")
+            timeout_record(event['user_id'])
+        elif r == "Failed":
+            bot.send(event, message=f"[CQ:at,qq={event['user_id']}]\n" + "出错了qaq")
+            bot.send_private_msg(user_id=event['user_id'], message=l)
+        elif r == "Failed-NoError":
+            bot.send(event, message=f"[CQ:at,qq={event['user_id']}]\n" + "出错了qaq，而且不是一般的编译错误，log太长了我懒得发，跟我主人说吧qwq")
+        elif r == "Done":
+            bot.send(event, message=f"[CQ:at,qq={event['user_id']}]\n" + l)
+    except Exception:
+        bot.send(event, message="似乎你（或者群主设置）不允许群内陌生人私聊", at_sender=True)
+
 
 @app.task
 def send_rst_doc(doc, event):
