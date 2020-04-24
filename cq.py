@@ -1,4 +1,4 @@
-import random
+import random, os
 import time
 import numpy
 import pinyin
@@ -16,8 +16,9 @@ blacklist = ["智障", "傻逼", "傻b", "你国", "贵国", "死妈", "死🐴"
 bot = CQHttp(api_root=custom_settings.CQHTTP_API)
 application = bot.wsgi
 r = redis.Redis(host='127.0.0.1', port=6379, db=0)
-admin = [2300936257, 1458814497]
+admin = [2300936257, 1458814497, 2782676253]
 owner = 2300936257
+get_qq = lambda s: int(''.join(list(filter(str.isnumeric, s))))
 
 help_string = """
 所有命令以西文大于号">"和一个空格开头，基本上支持群聊和私聊使用。
@@ -28,25 +29,33 @@ help_string = """
 \t常量的书写格式：E, I, pi；oo代表无限大；
 \t积分 integrate(表达式, (变量, 下界, 上界)) 或者 integrate(表达式, 变量)；
 \t微分 diff(表达式, 变量, 变量, 变量, ...)，如diff(sin(x), x, x, x)表示对sin(x)求x的三阶导；
-\t求和 Sum(表达式, (变量, 下界, 上界)).doit()，不加doit()不会计算。
+\t求和 summation(表达式, (变量, 下界, 上界))。
 \t注意这些计算都是符号计算，数值计算可以用.n()或者数值计算方法，如nsolve等。
 \t更多功能参见sympy.org。
 
-"> render" + LaTeX文字
-\t渲染LaTeX段落。如果希望渲染公式请用 $ ... $ 或者 \\( ... \\) 括起来；不支持行间公式（即 $$ ... $$ 或者 \\[ ... \\] 括起的公式），可以用 $ \\displaystyle ... $ 代替。
+"> render " + LaTeX文字
+\t渲染LaTeX段落。如果希望渲染公式请用 $ ... $ 或者 \\( ... \\) 括起来；支持行间公式（即 $$ ... $$ 或者 \\[ ... \\] 括起的公式）。
 \t如果希望添加LaTeX宏包，可以在最开头用"\\begin{bot-usepackage} 包1 包2 ... \\end{bot-usepackage}"声明希望用到的宏包，如果没有安装，可以联系bot作者。
 \t如果希望添加LaTeX preamble里的内容，可以紧接着用""\\begin{bot-defs} ... \\end{bot-defs}"添加。
 
-"> render-r" + LaTeX文字
+"> render-r " + LaTeX文字
 \t与上一个命令相同，会私聊回发你的LaTeX代码。
 
-"> latex" + LaTeX公式
-\t正在开发，请稍等。
+"> latex " + LaTeX公式
+\t渲染数学公式，用法与上面的命令相同。
 
-"> brainfk" + Brainfuck程序 [ + "| input |" + ascii输入 ]
+"> latex-r " + LaTeX公式
+同理。
+
+上面四个命令会进行缓存。如果发现机器人相应很快，但是结果不正确，请联系机器人管理员。
+
+"> brainfk " + Brainfuck程序 [ + "| input |" + ascii输入 ]
 \tBrainfuck程序，输入和输出都是ascii，纸带向右无限延伸，每个格子范围是0~255（取模）。
 
-"> help" [ + calc命令可用的函数 ]
+"> ping"
+仅限私聊，如果机器人在线，会回复PONG。可以用来测试机器人在线以及网络情况。
+
+"> help " [ + calc命令可用的函数 ]
 \t不加参数：显示这个帮助信息；添加参数：显示sympy函数的帮助文档（如果有）。
 
 附加功能：
@@ -74,9 +83,8 @@ def handle_msg(event):
             comms = comm.split()
             c = comms[0].capitalize()
             if c == 'Forgive' and event['user_id'] in admin:
-                comms[1] = ''.join(filter(str.isnumeric, comms[1]))
-                r.set("timeout" + comms[1], 0)
-                return {'reply': "原谅你啦 [CQ:at,qq=%s]" % comms[1], "at_sender": False, "auto_escape":False}
+                r.set("timeout" + get_qq(comms[1]), 0)
+                return {'reply': "原谅你啦 [CQ:at,qq=%s]" % get_qq(comms[1]), "at_sender": False, "auto_escape":False}
             if c == 'Help':
                 cms = comm[4:].strip()
                 if cms == '':
@@ -105,6 +113,15 @@ def handle_msg(event):
             if c == 'Eval' and event['user_id'] in admin:
                 res = eval(comm[4:].strip(), globals(), numpy.__dict__)
                 return {'reply': str(res), 'at_sender': False, 'auto_escape': True}
+            if c == 'Purge' and event['user_id'] in admin:
+                c0 = os.system("rm ./coolq/data/image/*")
+                c1 = os.system("rm ./coolq/data/record/*")
+                c2 = os.system("rm ./latex_process/*.jpeg")
+                c3 = os.system("rm ./latex/texput.tex")
+                c4 = os.system("rm ./latex_output/*")
+                return {'reply': str((c0, c1, c2, c3, c4))}
+            if c == 'Ping' and event['message_type'] == "private":
+                return {'reply': 'PONG', 'at_sender': False}
             if c == 'Calc':
                 tasks.calc_sympy.delay(comm, event)
                 return
@@ -115,6 +132,12 @@ def handle_msg(event):
                 return
             if c == 'Render-r':
                 tasks.docker_latex.delay(comm[8:].strip(), True, event)
+                return
+            if c == 'Latex':
+                tasks.docker_latex.delay(comm[6:].strip(), False, event, True)
+                return
+            if c == 'Latex-r':
+                tasks.docker_latex.delay(comm[8:].strip(), True, event, True)
                 return
             if c == 'Brainfk':
                 res = comm[8:].split("| input |")
@@ -132,11 +155,11 @@ def handle_msg(event):
                 r.expire("shock", 15 * shock**2)
                 level = comm.count("电") + 5 * comm.count("⚡") + shock * 1.5
                 d = int(random.gauss(15*60 + 10 * level ** 2, level * 2))
-                if d > 3 * 60 * 60:
-                    d = 3 * 60 * 60
+                if d > 24 * 60 * 60:
+                    d = 24 * 60 * 60
                 bot.set_group_ban(group_id = event['group_id'], user_id = event['user_id'], duration = d)
                 return {'reply': "您被电了 %s 秒！%s" % (d, "（"*int(min(5, level)))}
-            return {'reply': "憨批（试下 > help", 'auto_escape': True}
+            return {'reply': "qwq（试下 > help", 'auto_escape': True}
         except Exception as e:
             return {'reply': f'报错了qaq: {str(type(e))}\n{clamp(str(e))}', 'auto_escape': True}
     if event['message_type'] == "group":
@@ -202,13 +225,6 @@ def handle_group_increase(event):
         bot.send(event, message='神音姐姐又拉人了', auto_escape=True)
     if event['user_id'] == event['self_id']:
         tasks.reject_unfamiliar_group.delay(event['group_id'])
-
-@bot.on_notice('group_decrease')
-def handle_group_decrease(event):
-    if event['group_id'] == 80852074 and event['sub_type'] == "leave":
-        bot.set_group_whole_ban(group_id=80852074)
-        bot.send(message = " --- EMERGENCY LOCKDOWN --- ", event=event)
-        bot.send(message = f"> Deathrattle of user {event['user_id']} <", event=event)
 
 @bot.on_request('friend')
 def handle_friend_request(event):

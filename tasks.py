@@ -161,7 +161,7 @@ def clamp(s, l=200):
     return s
 
 @app.task(soft_time_limit=70, time_limit = 90)
-def docker_latex(src, resend, event):
+def docker_latex(src, resend, event, ismath=False):
     pkgs = ()
     defs = ""
     if src[:22] == "\\begin{bot-usepackage}":
@@ -171,11 +171,12 @@ def docker_latex(src, resend, event):
     if src[:16] == "\\begin{bot-defs}":
         src = src[16:]
         defs, src = src.split("\\end{bot-defs}")
+    if ismath:
+        src = "\\( \\displaystyle " + src + "\\)"
     src_ltx = latexify_docker.get_source(src, pkgs, defs)
     r, rets, l = latexify_docker.compile_latex(src_ltx)
-    print(r, rets)
     try:
-        if resend or (r != "Done"):
+        if resend or (r not in ["Done", "Cached"]):
             bot.send_private_msg(user_id=event['user_id'], message=event['message'])
         if r == "Timeout":
             bot.send_private_msg(user_id=event['user_id'], message="TLE~qwq")
@@ -185,10 +186,11 @@ def docker_latex(src, resend, event):
             bot.send_private_msg(user_id=event['user_id'], message=l)
         elif r == "Failed-NoError":
             bot.send(event, message=f"[CQ:at,qq={event['user_id']}]\n" + "出错了qaq，而且不是一般的编译错误，log太长了我懒得发，跟我主人说吧qwq")
-        elif r == "Done":
+        elif r in ["Done", "Cached"]:
             bot.send(event, message=f"[CQ:at,qq={event['user_id']}]\n" + l)
     except Exception:
         bot.send(event, message="似乎你（或者群主设置）不允许群内陌生人私聊", at_sender=True)
+    return r, rets, l
 
 
 @app.task
@@ -220,7 +222,7 @@ def calc_sympy(comm, event):
             bot.send(event, message="只准用ascii字符，够用的quq")
             return
         if '"' in comm or "'" in comm:
-            bot.send(event, message=comm, auto_escape=False)
+            bot.send(event, message="qwq?", auto_escape=False)
             timeout_record(event['user_id'])
             return
         res = parse_expr(comm[4:].strip(), global_dict=calc_dict, local_dict=fools_dict)
