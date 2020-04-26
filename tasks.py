@@ -3,7 +3,7 @@ import sympy
 from sympy.parsing.sympy_parser import parse_expr
 from celery_config import app
 from celery.exceptions import SoftTimeLimitExceeded
-import latexify_docker
+import latexify_docker, haskell_docker
 import fcntl
 import custom_settings
 
@@ -185,12 +185,12 @@ def docker_latex(src, resend, event, ismath=False):
             bot.send(event, message=f"[CQ:at,qq={event['user_id']}]\n" + "出错了qaq")
             bot.send_private_msg(user_id=event['user_id'], message=l)
         elif r == "Failed-NoError":
-            bot.send(event, message=f"[CQ:at,qq={event['user_id']}]\n" + "出错了qaq，而且不是一般的编译错误，log太长了我懒得发，跟我主人说吧qwq")
+            bot.send(event, message=f"[CQ:at,qq={event['user_id']}]\n" + "出错了qaq，而且很不寻常，跟我主人说吧qwq")
         elif r in ["Done", "Cached"]:
             bot.send(event, message=f"[CQ:at,qq={event['user_id']}]\n" + l)
-    except Exception:
-        bot.send(event, message="似乎你（或者群主设置）不允许群内陌生人私聊", at_sender=True)
-    return r, rets, l
+    except Exception as e:
+        bot.send(event, message="似乎你（或者群主设置）不允许群内陌生人私聊，或者网络错误："+str(e)+"请将错误代码和发生的时间告诉主任", at_sender=True)
+    return r, rets
 
 
 @app.task
@@ -246,3 +246,28 @@ def run_bf(event, code, inp="", useascii=True):
         return ("Timeout", event['user_id'])
     return inp
 
+@app.task(soft_time_limit=60, time_limit=70)
+def run_hs(event, src, inp=""):
+    try:
+        status, code, out, comlog = haskell_docker.runghc(src, inp)
+        if code == 0: # Finished
+            if status == "Done":
+                bot.send(event, "结果为:\n" + clamp(out), auto_escape=True, at_sender=True)
+                bot.send_private_msg(user_id=event['user_id'], auto_escape=True, message="编译日志：\n" + comlog)
+                if len(out) > 200:
+                    bot.send_private_msg(user_id=event['user_id'], auto_escape=True, message="完整结果：\n" + out)
+            elif status == "No-output":
+                bot.send(event, "成功运行，没有输出。", at_sender=True)
+            else:
+                print("WTF? at run_hs()")
+        else:
+            print(status, code)
+            bot.send(event, "出错了qaq", at_sender=True)
+            bot.send_private_msg(user_id=event['user_id'], auto_escape=True, message="编译日志：\n" + comlog)
+            bot.send_private_msg(user_id=event['user_id'], auto_escape=True, message="完整结果：\n" + out)
+    except SoftTimeLimitExceeded:
+        bot.send(event, f"[CQ:at,qq={event['user_id']}]\nTLE~qwq")
+        timeout_record(event['user_id'])
+        return ("Timeout", event['user_id'])
+    except Exception as e:
+        return bot.send(event, f'\n报错了qaq: {str(type(e))}\n{clamp(str(e))}', auto_escape=True)

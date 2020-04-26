@@ -9,13 +9,12 @@ def compile_latex(src):
     if not os.path.isfile(f"{custom_settings.CQ_IMG_DIR}{u}.jpeg"):
         # phase I
         with r.lock("LATEX-1"):
-            os.system("ulimit -t 30")
             with open("latex/texput.tex", "w") as f:
                 f.write(src)
             os.system("docker container rm latex_container 2> /dev/null")
             timeout=False
             try:
-                compile_return = os.system("docker run -m 1GB -v /Users/trebor/Desktop/coolq/latex/texput.tex:/home/latex/texput.tex --name latex_container treborhuang/latex > /dev/null")
+                compile_return = os.system("ulimit -t 30 ; docker run -m 1GB -v /Users/trebor/Desktop/coolq/latex/texput.tex:/home/latex/texput.tex --name latex_container treborhuang/latex > /dev/null")
             except SoftTimeLimitExceeded:
                 timeout=True
         if timeout:

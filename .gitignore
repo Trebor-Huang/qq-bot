@@ -9,3 +9,4 @@ __pycache__/
 *.tex
 latex_output/
 coolq/*
+srcfolder/*

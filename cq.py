@@ -10,6 +10,7 @@ from cqhttp import CQHttp
 import redis
 import tasks
 import custom_settings
+import atexit
 # docker run --name=coolq -d -p 9000:9000 -p 5700:5700 -v $(pwd)/coolq:/home/user/coolq coolq/wine-coolq
 blacklist = ["智障", "傻逼", "傻b", "你国", "贵国", "死妈", "死🐴", "老子", "贵群", "弱智", "政治", "脑残", "尼玛"]
 
@@ -45,15 +46,18 @@ help_string = """
 \t渲染数学公式，用法与上面的命令相同。
 
 "> latex-r " + LaTeX公式
-同理。
+\t同理。
 
 上面四个命令会进行缓存。如果发现机器人相应很快，但是结果不正确，请联系机器人管理员。
 
 "> brainfk " + Brainfuck程序 [ + "| input |" + ascii输入 ]
 \tBrainfuck程序，输入和输出都是ascii，纸带向右无限延伸，每个格子范围是0~255（取模）。
 
+"> haskell " + Haskell程序 [ + "| input |" + stdin输入 ]
+\tHaskell程序，必须以"Module Main where"开头。
+
 "> ping"
-仅限私聊，如果机器人在线，会回复PONG。可以用来测试机器人在线以及网络情况。
+\t仅限私聊，如果机器人在线，会回复PONG。可以用来测试机器人在线以及网络情况。
 
 "> help " [ + calc命令可用的函数 ]
 \t不加参数：显示这个帮助信息；添加参数：显示sympy函数的帮助文档（如果有）。
@@ -84,7 +88,7 @@ def handle_msg(event):
             c = comms[0].capitalize()
             if c == 'Forgive' and event['user_id'] in admin:
                 r.set("timeout" + get_qq(comms[1]), 0)
-                return {'reply': "原谅你啦 [CQ:at,qq=%s]" % get_qq(comms[1]), "at_sender": False, "auto_escape":False}
+                return {'reply': "原谅你啦 [CQ:at,qq=%s]" % str(get_qq(comms[1])), "at_sender": False, "auto_escape":False}
             if c == 'Help':
                 cms = comm[4:].strip()
                 if cms == '':
@@ -108,44 +112,55 @@ def handle_msg(event):
                     return
                 tasks.send_rst_doc.delay(res.__doc__, event)
                 return None if event['message_type'] == "private" else {'reply': "帮助已发送至私聊"}
-            if c == 'Echo' and event['user_id'] in admin:
+            elif c == 'Echo' and event['user_id'] in admin:
                 return {'reply': comm[4:].strip(), 'at_sender': False, 'auto_escape': True}
-            if c == 'Eval' and event['user_id'] in admin:
+            elif c == 'Eval' and event['user_id'] in admin:
                 res = eval(comm[4:].strip(), globals(), numpy.__dict__)
                 return {'reply': str(res), 'at_sender': False, 'auto_escape': True}
-            if c == 'Purge' and event['user_id'] in admin:
-                c0 = os.system("rm ./coolq/data/image/*")
+            elif c == 'Purge' and event['user_id'] in admin:
+                c0 = os.system("rm ./coolq/data/image/*.cqimg ./coolq/data/image/*.jpeg")
                 c1 = os.system("rm ./coolq/data/record/*")
                 c2 = os.system("rm ./latex_process/*.jpeg")
                 c3 = os.system("rm ./latex/texput.tex")
                 c4 = os.system("rm ./latex_output/*")
-                return {'reply': str((c0, c1, c2, c3, c4))}
-            if c == 'Ping' and event['message_type'] == "private":
+                c5 = os.system("rm ./srcfolder/*")
+                return {'reply': str((c0, c1, c2, c3, c4, c5))}
+            elif c == 'Ping' and event['message_type'] == "private":
                 return {'reply': 'PONG', 'at_sender': False}
-            if c == 'Calc':
+            elif c == 'Calc':
                 tasks.calc_sympy.delay(comm, event)
                 return
-            if c == 'Ord':
+            elif c == 'Ord':
                 return {"reply": "目前暂停了这项功能"}
-            if c == 'Render':
+            elif c == 'Render':
                 tasks.docker_latex.delay(comm[6:].strip(), False, event)
                 return
-            if c == 'Render-r':
+            elif c == 'Render-r':
                 tasks.docker_latex.delay(comm[8:].strip(), True, event)
                 return
-            if c == 'Latex':
+            elif c == 'Latex':
                 tasks.docker_latex.delay(comm[6:].strip(), False, event, True)
                 return
-            if c == 'Latex-r':
+            elif c == 'Latex-r':
                 tasks.docker_latex.delay(comm[8:].strip(), True, event, True)
                 return
-            if c == 'Brainfk':
+            elif c == 'Brainfk':
                 res = comm[8:].split("| input |")
+                if len(res) > 2:
+                    raise ValueError("输入格式不正确qwq")
                 tasks.run_bf.delay(event, *res, useascii=True)
                 return
-            if c == 'Brainfk-n':
+            elif c == 'Brainfk-n':
                 res = comm[10:].split("| input |")
+                if len(res) > 2:
+                    raise ValueError("输入格式不正确qwq")
                 tasks.run_bf.delay(event, *res, useascii=False)
+                return
+            if c == 'Haskell':
+                res = comm[8:].split("| input |")
+                if len(res) > 2:
+                    raise ValueError("输入格式不正确qwq")
+                tasks.run_hs.delay(event, *res)
                 return
             if ('电' in comm or '⚡' in comm) and event['message_type'] == "group":
                 shock = int(r.incr("shock"))
@@ -173,9 +188,12 @@ def handle_msg(event):
                     return {'reply': "Daisuke~", 'at_sender': False, 'auto_escape': True}
             if '贴贴' in event['message'] and event['user_id'] == 1458814497:
                 return {'reply': "（要贴贴！", 'at_sender': False, 'auto_escape': True}
+            if event['message'].strip().strip(",.!?！？，。…“”'\"").upper() == "PUSHEEN":
+                return {'reply': "[CQ:image,file=pusheen.png]", 'at_sender': False}
+            if 'POPEEN' in event['message'].upper():
+                return {'reply': "[CQ:image,file=popeen.jpg]", 'at_sender': False}
             try:  # 复读
                 with r.lock('repeat', blocking_timeout=5) as _:
-                    # code you want executed only after the lock has been acquired
                     if rc := r.get("repeat" + str(event['group_id'])):
                         rcount = int(r.get("count" + str(event['group_id'])).decode('utf-8'))
                         # count the number of last repeat
@@ -185,9 +203,9 @@ def handle_msg(event):
                             r.set("repeat" + str(event['group_id']), str(event['raw_message']))
                             if rcount > 1:
                                 r.set("count" + str(event['group_id']), 0)
-                                if random.randint(1, 5) == 2:
+                                if random.randint(1, 80) == 2:
                                     return {'reply': "打断复读的事屑（确信", 'at_sender': False, 'auto_escape': True}
-                                if random.randint(1, 7) == 6:
+                                if random.randint(1, 50) == 6:
                                     return {'reply': "？？", 'at_sender': False, 'auto_escape': True}
                                 r.set("count" + str(event['group_id']), 1)
                                 return
@@ -206,6 +224,8 @@ def handle_msg(event):
                     else:
                         r.set("repeat" + str(event['group_id']), str(event['raw_message']))
                         r.set("count" + str(event['group_id']), 1)
+                    r.expire("repeat" + str(event['group_id']), 90)
+                    r.expire("count" + str(event['group_id']), 90)
             except redis.lock.LockError:
                 print("LockError occured")
                 return
@@ -214,8 +234,11 @@ def handle_msg(event):
             if random.randint(1, 360) == 144 and event['group_id'] == 730695976:
                 return {'reply': "爬", 'at_sender': False, 'auto_escape': True}
         except Exception as e:
+            if str(e) == "(200, -26)":
+                return {'reply': f'消息可能太长了', 'auto_escape': True}
             return {'reply': f'报错了qaq: {str(type(e))}\n{clamp(str(e))}', 'auto_escape': True}
-
+    elif event['message_type'] == "private":
+        return {'reply': "qwq（试下 > help", 'auto_escape': True}
 
 
 @bot.on_notice('group_increase')
@@ -234,6 +257,12 @@ def handle_friend_request(event):
 def handle_group_request(event):
     if event['sub_type'] == "invite":
         bot.send_private_msg(user_id=owner, message=str(event), auto_escape=True)
+        bot.send_private_msg(user_id=event['user_id'], message="只能拉我进有主人在的群qwq", auto_escape=True)
+
+@atexit.register
+def on_exit():
+    print(">>> Closing redis client <<<")
+    r.close()
 
 if __name__ == "__main__":
     bot.run(host='127.0.0.1', port=8099, debug=True)
