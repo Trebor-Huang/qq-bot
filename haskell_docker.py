@@ -11,14 +11,14 @@ def runghc(src, infile):
     if not os.path.isfile("./srcfolder/" + usrc + ".hs"):
         with open("./srcfolder/" + usrc + ".hs", "w") as fsrc:
             fsrc.write(src)
-    ret = os.system(f"docker run --rm --name haskell_{uout} -m 256MB --env SRC={usrc} --env IN={uin} --env OUT={uout} -v $(pwd)/srcfolder:/haskell haskell:latest")
+    ret = os.system(f"docker run --rm --name haskell_{uout} -m 256MB --env SRC={usrc} --env IN={uin} --env OUT={uout} --network=no-internet -v $(pwd)/srcfolder:/haskell haskell:latest")
     with open("./srcfolder/" + usrc + ".log") as f:
-        log = f.read().strip()
+        log = f.read().strip().replace(usrc, "<source>")
     if not os.path.isfile("./srcfolder/" + uout + ".out"):
         return ("No-output", ret, "", log)
     else:
         with open("./srcfolder/" + uout + ".out") as f:
-            output = f.read().strip()
+            output = f.read().strip().replace(usrc, "<source>")
         return ("Done", ret, output, log)
 
 if __name__ == "__main__":

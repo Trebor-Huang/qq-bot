@@ -246,7 +246,7 @@ def run_bf(event, code, inp="", useascii=True):
         return ("Timeout", event['user_id'])
     return inp
 
-@app.task(soft_time_limit=60, time_limit=70)
+@app.task(soft_time_limit=60, time_limit=70, rate_limit="10/m")
 def run_hs(event, src, inp=""):
     try:
         status, code, out, comlog = haskell_docker.runghc(src, inp)
@@ -260,6 +260,8 @@ def run_hs(event, src, inp=""):
                 bot.send(event, "成功运行，没有输出。", at_sender=True)
             else:
                 print("WTF? at run_hs()")
+        elif code == 35072:
+            bot.send(event, "TLE~好坏qwq", at_sender=True)
         else:
             print(status, code)
             bot.send(event, "出错了qaq", at_sender=True)

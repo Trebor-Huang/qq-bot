@@ -9,12 +9,11 @@ def compile_latex(src):
     if not os.path.isfile(f"{custom_settings.CQ_IMG_DIR}{u}.jpeg"):
         # phase I
         with r.lock("LATEX-1"):
-            with open("latex/texput.tex", "w") as f:
+            with open(f"latex/{u}.tex", "w") as f:
                 f.write(src)
-            os.system("docker container rm latex_container 2> /dev/null")
             timeout=False
             try:
-                compile_return = os.system("ulimit -t 30 ; docker run -m 1GB -v /Users/trebor/Desktop/coolq/latex/texput.tex:/home/latex/texput.tex --name latex_container treborhuang/latex > /dev/null")
+                compile_return = os.system(f"ulimit -t 30 ; docker run -m 1GB -v /Users/trebor/Desktop/coolq/latex/{u}.tex:/home/latex/texput.tex --name latex_container{u} treborhuang/latex > /dev/null")
             except SoftTimeLimitExceeded:
                 timeout=True
         if timeout:
@@ -22,11 +21,11 @@ def compile_latex(src):
             return ("Timeout", (), "")
         # phase II
         with r.lock("LATEX-2"):
-            os.system("rm -dfR ./latex_output/") # if you don't delete the folder, docker cp will just create a latex/ folder inside the latex_output/ folder.
-            copy_return = os.system("docker cp latex_container:/home/latex/ ./latex_output/")
-            os.system("docker container rm latex_container > /dev/null")
+            os.system(f"rm -rf ./latex_output/{u} | grep -v No")
+            copy_return = os.system(f"docker cp latex_container{u}:/home/latex/ ./latex_output/{u}/")
+            os.system(f"docker container rm latex_container{u} > /dev/null")
             if compile_return != 0:
-                with open(f"./latex_output/texput.log", "r") as f:
+                with open(f"./latex_output/{u}/texput.log", "r") as f:
                     logs = f.read()
         if compile_return != 0:
             r.close()
@@ -36,7 +35,7 @@ def compile_latex(src):
             return ("Failed-NoError", (compile_return, copy_return), logs)
         # phase III
         with r.lock("LATEX-3"):
-            convert_return = os.system(f"convert -density 500 ./latex_output/texput.pdf ./latex_process/{u}.jpeg")
+            convert_return = os.system(f"convert -density 500 ./latex_output/{u}/texput.pdf ./latex_process/{u}.jpeg")
             resize_return = os.system(f"convert ./latex_process/{u}.jpeg -resample 400 {custom_settings.CQ_IMG_DIR}{u}.jpeg")
         r.close()
         if convert_return or resize_return:

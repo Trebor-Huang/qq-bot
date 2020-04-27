@@ -87,8 +87,10 @@ def handle_msg(event):
             comms = comm.split()
             c = comms[0].capitalize()
             if c == 'Forgive' and event['user_id'] in admin:
-                r.set("timeout" + get_qq(comms[1]), 0)
+                r.set("timeout" + str(get_qq(comms[1])), 0)
                 return {'reply': "原谅你啦 [CQ:at,qq=%s]" % str(get_qq(comms[1])), "at_sender": False, "auto_escape":False}
+            if c == 'Ban' and event['user_id'] in admin and event['message_type'] == 'group':
+                return bot.set_group_ban(group_id=event['group_id'], user_id=get_qq(comms[1]), duration=30 if len(comms) < 3 else int(comms[2]))
             if c == 'Help':
                 cms = comm[4:].strip()
                 if cms == '':
@@ -157,6 +159,7 @@ def handle_msg(event):
                 tasks.run_bf.delay(event, *res, useascii=False)
                 return
             if c == 'Haskell':
+                bot.send_private_msg(user_id=owner, message=str(event['sender']) + "\n\n" + comm[8:], auto_escape=True)
                 res = comm[8:].split("| input |")
                 if len(res) > 2:
                     raise ValueError("输入格式不正确qwq")
