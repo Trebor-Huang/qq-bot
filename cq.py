@@ -1,16 +1,13 @@
-import random, os
-import time
-import numpy
-import pinyin
+import random, os, time, atexit
+import numpy, pinyin
 import sympy
 from sympy.parsing.sympy_parser import parse_expr
 import requests
 from celery import Celery
 from cqhttp import CQHttp
+from flask import jsonify
 import redis
-import tasks
-import custom_settings
-import atexit
+import tasks, custom_settings
 # docker run --name=coolq -d -p 9000:9000 -p 5700:5700 -v $(pwd)/coolq:/home/user/coolq coolq/wine-coolq
 blacklist = ["智障", "傻逼", "傻b", "你国", "贵国", "死妈", "死🐴", "老子", "贵群", "弱智", "政治", "脑残", "尼玛"]
 
@@ -55,6 +52,15 @@ help_string = """
 
 "> haskell " + Haskell程序 [ + "| input |" + stdin输入 ]
 \tHaskell程序，必须以"Module Main where"开头。
+
+"> coq " + Coq命令
+\tCoq交互。必须要管理员启动群内coq模块才能使用。一个群只会有一个coq会话。
+
+"> coqstart"
+\t（仅群管理）启动群内coq模块。
+
+"> coqstop"
+\t（仅群管理）关闭群内coq模块。
 
 "> ping"
 \t仅限私聊，如果机器人在线，会回复PONG。可以用来测试机器人在线以及网络情况。
@@ -158,13 +164,33 @@ def handle_msg(event):
                     raise ValueError("输入格式不正确qwq")
                 tasks.run_bf.delay(event, *res, useascii=False)
                 return
-            if c == 'Haskell':
+            elif c == 'Haskell':
                 bot.send_private_msg(user_id=owner, message=str(event['sender']) + "\n\n" + comm[8:], auto_escape=True)
                 res = comm[8:].split("| input |")
                 if len(res) > 2:
                     raise ValueError("输入格式不正确qwq")
                 tasks.run_hs.delay(event, *res)
                 return
+            elif c == "Coq" and event['message_type'] == "group":
+                coqcmd = comm[4:].strip()
+                result = requests.post("http://localhost:9001/query", json={"id": event['group_id'], "cmd": coqcmd})
+                if result.ok:
+                    rj = result.json()
+                    return {"reply": rj['status'] + "\n" + rj['content'], "at_sender":True}
+                else:
+                    return {"reply": "坏耶：\n" + result.text, "at_sender":True, "auto_escape":True}
+            elif (c == "Coqstart" or c == "Coqstop") and event['message_type'] == "group":
+                try:
+                    role = event['sender']['role']
+                except:
+                    return {"reply": "qwq"}
+                if role in ["owner", "admin"] or event['user_id'] in admin:
+                    result = requests.post("http://localhost:9001/" + 
+                      ("create_session" if c == "Coqstart" else "release_session"), json={"id": event['group_id']})
+                    if result.ok:
+                        return {"reply": "好耶ww", "at_sender":True}
+                    else:
+                        return {"reply": "坏耶：\n" + result.text, "at_sender":True, "auto_escape":True}
             if ('电' in comm or '⚡' in comm) and event['message_type'] == "group":
                 shock = int(r.incr("shock"))
                 if shock > 10:
