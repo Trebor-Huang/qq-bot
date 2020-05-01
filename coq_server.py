@@ -1,10 +1,11 @@
-import pexpect, re
+import pexpect, re, time
 import json
 import threading
 from flask import Flask, jsonify, request
 class Coq:
     def start(self):
         self.coq = pexpect.spawn('bash -c "coqtop | cat ; exit"', echo=False)
+        time.sleep(0.1)
         self.coq.expect("Coq <")
 
     def stop(self):
@@ -15,8 +16,9 @@ class Coq:
 
     def _input(self, cmd):
         self.coq.sendline(cmd)
-        self.coq.expect(re.compile(rb"^.+? <", flags=re.RegexFlag.M), timeout=5)
-        return self.coq.before.decode('utf-8')
+        time.sleep(1)
+        r = self.coq.read_nonblocking(size=99999, timeout=1)
+        return r.decode('utf-8')
 
     def sendline(self, cmd):
         if not self.coq.isalive():
@@ -24,8 +26,8 @@ class Coq:
         try:
             ret = self._input(cmd)
         except pexpect.TIMEOUT:
-            self.coq.sendcontrol('C')
-            self.coq.expect(re.compile(rb"^.+? <", flags=re.RegexFlag.M))
+            self.coq.kill(2)
+            self.coq.expect("Coq <")
             return ("Failed", "Time out.")
         except pexpect.EOF:
             self.coq.close()
@@ -70,4 +72,4 @@ def release():
         return jsonify({"status": "Success"})
 
 if __name__ == "__main__":
-    app.run(port="9001")
+    app.run(port="9001", threaded=False, processes=1)

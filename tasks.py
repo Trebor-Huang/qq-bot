@@ -189,7 +189,7 @@ def docker_latex(src, resend, event, ismath=False):
         elif r in ["Done", "Cached"]:
             bot.send(event, message=f"[CQ:at,qq={event['user_id']}]\n" + l)
     except Exception as e:
-        bot.send(event, message="似乎你（或者群主设置）不允许群内陌生人私聊，或者网络错误："+str(e)+"请将错误代码和发生的时间告诉主任", at_sender=True)
+        bot.send(event, message="似乎你（或者群主设置）不允许群内陌生人私聊，或者网络错误："+str(e)+"请将错误代码和发生的时间告诉我的主人", at_sender=True)
     return r, rets
 
 

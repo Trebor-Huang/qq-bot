@@ -13,7 +13,7 @@ def compile_latex(src):
                 f.write(src)
             timeout=False
             try:
-                compile_return = os.system(f"ulimit -t 30 ; docker run -m 1GB -v /Users/trebor/Desktop/coolq/latex/{u}.tex:/home/latex/texput.tex --name latex_container{u} treborhuang/latex > /dev/null")
+                compile_return = os.system(f"ulimit -t 30 ; docker run -m 1GB -v $(pwd)/latex/{u}.tex:/home/latex/texput.tex --name latex_container{u} treborhuang/latex > /dev/null")
             except SoftTimeLimitExceeded:
                 timeout=True
         if timeout:

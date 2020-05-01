@@ -21,11 +21,14 @@ This program requires:
  - cqhttp
  - celery
  - redis (both the executable and the python library)
- - Some LaTeX distribution
  - numpy
  - sympy
  - pinyin
  - imagemagick
+
+ - docker
+ - a usable LaTeX distribution
+ - Coq
 
 ## Setup
 

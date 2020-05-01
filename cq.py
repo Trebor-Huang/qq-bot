@@ -14,11 +14,16 @@ blacklist = ["智障", "傻逼", "傻b", "你国", "贵国", "死妈", "死🐴"
 bot = CQHttp(api_root=custom_settings.CQHTTP_API)
 application = bot.wsgi
 r = redis.Redis(host='127.0.0.1', port=6379, db=0)
-admin = [2300936257, 1458814497, 2782676253]
+admin = [2300936257, 1458814497, 2782676253, 3415064240]
 owner = 2300936257
 get_qq = lambda s: int(''.join(list(filter(str.isnumeric, s))))
 
+# coolq error codes
+# -2 未收到服务器回复，可能未发送成功
+#-26 消息太长
+
 help_string = """
+不仔细读帮助文档的话，不会用是必然的，请仔细读，这里已经包含了你需要的所有信息。
 所有命令以西文大于号">"和一个空格开头，基本上支持群聊和私聊使用。
 
 "> calc " + 表达式
@@ -45,7 +50,7 @@ help_string = """
 "> latex-r " + LaTeX公式
 \t同理。
 
-上面四个命令会进行缓存。如果发现机器人相应很快，但是结果不正确，请联系机器人管理员。
+上面四个命令会进行缓存。如果发现机器人响应很快，但是结果不正确，请联系机器人管理员。
 
 "> brainfk " + Brainfuck程序 [ + "| input |" + ascii输入 ]
 \tBrainfuck程序，输入和输出都是ascii，纸带向右无限延伸，每个格子范围是0~255（取模）。
@@ -67,6 +72,7 @@ help_string = """
 
 "> help " [ + calc命令可用的函数 ]
 \t不加参数：显示这个帮助信息；添加参数：显示sympy函数的帮助文档（如果有）。
+\t注意，这里的帮助文档仅限calc命令的帮助，比如"> help solve"。没有其他东西的帮助。
 
 附加功能：
  - 复读
@@ -176,9 +182,11 @@ def handle_msg(event):
                 result = requests.post("http://localhost:9001/query", json={"id": event['group_id'], "cmd": coqcmd})
                 if result.ok:
                     rj = result.json()
-                    return {"reply": rj['status'] + "\n" + rj['content'], "at_sender":True}
+                    if len(rj['content']) > 200:
+                        bot.send_private_msg(message=clamp(rj['content'], 10000), user_id = event['user_id'])
+                    return {"reply": rj['status'] + "\n" + clamp(rj['content']), "at_sender":True}
                 else:
-                    return {"reply": "坏耶：\n" + result.text, "at_sender":True, "auto_escape":True}
+                    return {"reply": "坏耶：\n" + clamp(result.text, 300), "at_sender":True, "auto_escape":True}
             elif (c == "Coqstart" or c == "Coqstop") and event['message_type'] == "group":
                 try:
                     role = event['sender']['role']
@@ -190,7 +198,7 @@ def handle_msg(event):
                     if result.ok:
                         return {"reply": "好耶ww", "at_sender":True}
                     else:
-                        return {"reply": "坏耶：\n" + result.text, "at_sender":True, "auto_escape":True}
+                        return {"reply": "坏耶：\n" + clamp(result.text, 100), "at_sender":True, "auto_escape":True}
             if ('电' in comm or '⚡' in comm) and event['message_type'] == "group":
                 shock = int(r.incr("shock"))
                 if shock > 10:
