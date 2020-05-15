@@ -6,7 +6,7 @@ import requests
 from celery import Celery
 from cqhttp import CQHttp
 from flask import jsonify
-import redis
+import redis, sqlite3, datetime
 import tasks, custom_settings
 # docker run --name=coolq -d -p 9000:9000 -p 5700:5700 -v $(pwd)/coolq:/home/user/coolq coolq/wine-coolq
 blacklist = ["智障", "傻逼", "傻b", "你国", "贵国", "死妈", "死🐴", "老子", "贵群", "弱智", "政治", "脑残", "尼玛"]
@@ -90,6 +90,12 @@ def evaluate_user(user_id):
 
 @bot.on_message
 def handle_msg(event):
+    if event['message_type'] == "group":
+        sqlconn = sqlite3.connect("history.db")
+        cursor = sqlconn.cursor()
+        cursor.execute("INSERT INTO history VALUES (?, ?, ?, ?, ?)", (event["message_id"], event["group_id"], event["user_id"], datetime.datetime.now().strftime("%Y-%m-%dT%H:%M:%S"), event["message"]))
+        sqlconn.commit()
+        sqlconn.close()
     if event['message'][0:2] == '> ' and event['message'] != "> ":
         if not evaluate_user(event['user_id']):
             return {'reply': "不喜欢你qwq（给我发女装照片好不好quq", 'at_user': True, 'auto_escape': True}
@@ -103,6 +109,18 @@ def handle_msg(event):
                 return {'reply': "原谅你啦 [CQ:at,qq=%s]" % str(get_qq(comms[1])), "at_sender": False, "auto_escape":False}
             if c == 'Ban' and event['user_id'] in admin and event['message_type'] == 'group':
                 return bot.set_group_ban(group_id=event['group_id'], user_id=get_qq(comms[1]), duration=30 if len(comms) < 3 else int(comms[2]))
+            if c == 'History' and event['user_id'] in admin and event['message_type'] == 'group':
+                sqlconn = sqlite3.connect("history.db")
+                cursor = sqlconn.cursor()
+                requirements = comm[7:].strip()
+                # trusted
+                for i, (fmsgid, fuserid, ftime, fcontent) in enumerate(cursor.execute(f"SELECT msgid, userid, time, content FROM history WHERE {requirements} AND groupid={event['group_id']} ORDER BY time")):
+                    if i > 5:
+                        bot.send_private_msg(message = f"#{fmsgid} - [CQ:at,qq={fuserid}] - {ftime}\n\n{fcontent}", user_id=event['user_id'])
+                    else:
+                        bot.send(event, f"#{fmsgid} - [CQ:at,qq={fuserid}] - {ftime}\n\n{fcontent}")
+                sqlconn.close()
+                return
             if c == 'Help':
                 cms = comm[4:].strip()
                 if cms == '':
@@ -229,47 +247,6 @@ def handle_msg(event):
                 return {'reply': "[CQ:image,file=pusheen.png]", 'at_sender': False}
             if 'POPEEN' in event['message'].upper():
                 return {'reply': "[CQ:image,file=popeen.jpg]", 'at_sender': False}
-            try:  # 复读
-                with r.lock('repeat', blocking_timeout=5) as _:
-                    if rc := r.get("repeat" + str(event['group_id'])):
-                        rcount = int(r.get("count" + str(event['group_id'])).decode('utf-8'))
-                        # count the number of last repeat
-                        if rc.decode('utf-8') == str(event['raw_message']):
-                            r.incr("count" + str(event['group_id']))
-                        else:
-                            r.set("repeat" + str(event['group_id']), str(event['raw_message']))
-                            if rcount > 1:
-                                r.set("count" + str(event['group_id']), 0)
-                                if random.randint(1, 80) == 2:
-                                    return {'reply': "打断复读的事屑（确信", 'at_sender': False, 'auto_escape': True}
-                                if random.randint(1, 50) == 6:
-                                    return {'reply': "？？", 'at_sender': False, 'auto_escape': True}
-                                r.set("count" + str(event['group_id']), 1)
-                                return
-                        if rcount >= 7:
-                            r.set("count" + str(event['group_id']), 0)
-                            return {'reply': "适度复读活跃气氛，过度复读影响交流。为了您和他人的健康，请勿过量复读。", 'at_sender': False, 'auto_escape': True}
-                        if random.randint(1, rcount+1) >= 3 and random.randint(1, rcount+1) >= 3:
-                            r.set("count" + str(event['group_id']), 0) # prevent spamming
-                            if random.randint(1, 30) == 4:
-                                return {'reply': "复  读  大  失  败", 'at_sender': False, 'auto_escape': True}
-                            if random.randint(1, 10) == 1:
-                                return {'reply': "（", 'at_sender': False, 'auto_escape': True}
-                            if random.randint(1, 20) == 33:
-                                return {'reply': "打断（（", 'at_sender': False, 'auto_escape': True}
-                            return {'reply': event['raw_message'], 'at_sender': False, 'auto_escape': False}
-                    else:
-                        r.set("repeat" + str(event['group_id']), str(event['raw_message']))
-                        r.set("count" + str(event['group_id']), 1)
-                    r.expire("repeat" + str(event['group_id']), 90)
-                    r.expire("count" + str(event['group_id']), 90)
-            except redis.lock.LockError:
-                print("LockError occured")
-                return
-            if random.randint(1, 455) == 44 and event['group_id'] == 730695976:
-                return {'reply': "3倍ice cream☆☆！！！", 'at_sender': False, 'auto_escape': True}
-            if random.randint(1, 360) == 144 and event['group_id'] == 730695976:
-                return {'reply': "爬", 'at_sender': False, 'auto_escape': True}
         except Exception as e:
             if str(e) == "(200, -26)":
                 return {'reply': f'消息可能太长了', 'auto_escape': True}
@@ -298,7 +275,7 @@ def handle_group_request(event):
 
 @atexit.register
 def on_exit():
-    print(">>> Closing redis client <<<")
+    print(">>> Closing <<<")
     r.close()
 
 if __name__ == "__main__":

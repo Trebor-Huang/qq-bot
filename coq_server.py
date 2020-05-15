@@ -27,7 +27,6 @@ class Coq:
             ret = self._input(cmd)
         except pexpect.TIMEOUT:
             self.coq.kill(2)
-            self.coq.expect("Coq <")
             return ("Failed", "Time out.")
         except pexpect.EOF:
             self.coq.close()
